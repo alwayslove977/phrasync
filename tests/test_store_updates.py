@@ -27,7 +27,8 @@ def test_portable_preview_never_calls_store(monkeypatch):
     monkeypatch.setattr(store_updates, "package_identity", lambda: None)
     monkeypatch.setattr(app_module, "_require_local_request", lambda request: None)
     client = TestClient(app_module.app)
-    assert client.get("/api/store-updates/status").json() == {"version": "0.4.5", "packaged": False}
+    from phrasync.config import APP_VERSION
+    assert client.get("/api/store-updates/status").json() == {"version": APP_VERSION, "packaged": False}
     assert client.post("/api/store-updates/check", headers={"Origin": "http://testserver"}).status_code == 503
     assert client.post("/api/store-updates/install", headers={"Origin": "http://testserver"}).status_code == 503
     assert client.post("/api/store-updates/install", headers={"Origin": "https://other.example"}).status_code == 403

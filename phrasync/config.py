@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 APP_NAME = "Phrasync"
-APP_VERSION = "0.4.5"
+APP_VERSION = "0.4.6"
 LEGACY_PREFIX = "VERSEFRAME"  # the app shipped under this name before Phrasync
 
 

@@ -1,0 +1,14 @@
+Phrasync 0.4.6.0 — Export reliability and speed
+
+This maintenance update focuses on mixed-footage export failures and unnecessary rendering work.
+
+- Fixed "Unknown background type: video" and the corresponding image case when footage tracks are enabled. Invalid or missing sources are still checked.
+- Export now allows hardware graphics instead of forcing software graphics. Software fallback remains available.
+- Removed per-frame PNG/base64 conversions from the compatibility encoder; frames stream locally with bounded memory.
+- Flat lyrics are composited before encoding, avoiding a second video decode/encode pass while preserving font handling.
+- Preserved frame timestamps for final MP4/audio muxing and IN/OUT exports. No frames are skipped.
+- Support logs now include selected graphics and encoding throughput.
+
+Local benchmark: the same 2-second 1080p30 effects export fell from 36.7 to 8.7 seconds (about 4.2x faster). A 10-second sample took 22.4 seconds. Results depend on hardware and project; realtime export is not guaranteed.
+
+Tested mixed tracks, 2D/3D text, full and IN/OUT exports, multiple frame rates, 4K compatibility encoding and custom bitrate. Still free, with local media processing.

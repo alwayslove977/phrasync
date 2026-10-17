@@ -56,16 +56,25 @@ def test_show_export_does_not_copy_or_create_a_second_mp4(tmp_path, monkeypatch)
 
 
 def test_4k_canvas_can_encode_without_browser_h264(tmp_path):
-    image = Image.new("RGB", (3840, 2160), "#406080")
-    stream = io.BytesIO()
-    image.save(stream, format="PNG")
+    import re
+    import urllib.request
+    image = Image.new("RGBA", (3840, 2160), "#406080")
     devtools = Mock()
-    devtools.evaluate.return_value = base64.b64encode(stream.getvalue()).decode("ascii")
+    def send_frame(expression):
+        import json
+        endpoint = re.search(r'fetch\("([^\"]+)"', expression).group(1)
+        frames = json.loads(re.search(r'const frames=(.*?);for', expression).group(1))
+        for _ in frames:
+            request = urllib.request.Request(endpoint, data=image.tobytes(), headers={'Origin': 'http://127.0.0.1:5526'})
+            with urllib.request.urlopen(request, timeout=30) as response:
+                assert response.status == 204
+        return True
+    devtools.evaluate.side_effect = send_frame
     output = tmp_path / "4k.h264"
-    _encode_canvas_ffmpeg(devtools, {"export": {"bitrateMbps": 150, "preset": "ultrafast"}},
+    _encode_canvas_ffmpeg(devtools, {"__renderOrigin": "http://127.0.0.1:5526", "export": {"bitrateMbps": 150, "preset": "ultrafast"}},
                           output, width=3840, height=2160, fps=30, frame_count=3, envelope=[0, 0, 0])
     assert output.stat().st_size > 0
-    assert devtools.evaluate.call_count == 3
+    assert devtools.evaluate.call_count == 1
     ok, details = decode_test(output)
     assert ok, details
 
@@ -73,7 +82,7 @@ def test_4k_canvas_can_encode_without_browser_h264(tmp_path):
 def test_cancelled_compatibility_render_removes_partial_stream(tmp_path):
     output = tmp_path / "partial.h264"
     with pytest.raises(RuntimeError, match="cancelled"):
-        _encode_canvas_ffmpeg(Mock(), {}, output, width=320, height=320, fps=30,
+        _encode_canvas_ffmpeg(Mock(), {"__renderOrigin": "http://127.0.0.1:5526"}, output, width=320, height=320, fps=30,
                               frame_count=2, envelope=[], cancel_check=lambda: True)
     assert not output.exists()
 

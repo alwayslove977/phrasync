@@ -215,7 +215,7 @@ def preflight_project(project: dict[str, Any]) -> CriticReport:
                     "background_decode_failed",
                     f"FFmpeg could not decode the selected {background_type}: {message[:600]}",
                 )
-    elif background_type != "dynamic":
+    elif background_type not in {"dynamic", "image", "video"}:
         report.add("error", "background_type", f"Unknown background type: {background_type}")
     if background_type == "dynamic":
         visual = background.get("visual", "aurora")

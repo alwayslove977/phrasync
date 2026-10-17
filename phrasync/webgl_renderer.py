@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import base64
 import shutil
 import socket
 import subprocess
@@ -20,6 +19,7 @@ from .diagnostics import log_event
 from .footage import effects_enabled
 from .audio_spectrum import SpectrumSource
 from .storage import get_av_asset
+from .frame_bridge import frame_bridge
 
 
 ProgressCallback = Callable[[float, str], None]
@@ -101,8 +101,9 @@ class _DevTools:
 
 
 def _encode_canvas_ffmpeg(devtools, project, path, *, width, height, fps, frame_count,
-                          envelope, progress=None, cancel_check=None):
+                          envelope, progress=None, cancel_check=None, frame_transform=None):
     """Lossless frame transport, bounded memory, no browser codec dependency."""
+    started = time.monotonic()
     log_event("info", "render", f"FFmpeg canvas encoder: {width}x{height}, {fps} fps, bitrate={bitrate_bps(project) or 'CRF'}")
     audio = get_av_asset(project.get("audioAssetId")) if project.get("audioAssetId") else None
     bg = project.get("background") or {}
@@ -113,31 +114,59 @@ def _encode_canvas_ffmpeg(devtools, project, path, *, width, height, fps, frame_
     spectrum = SpectrumSource(audio.path, fps, start_time=start_time) if audio and needs_spectrum else None
     with tempfile.TemporaryFile() as errors:
         encoder = subprocess.Popen([
-            ffmpeg_exe(), "-y", "-v", "error", "-f", "image2pipe", "-vcodec", "png",
-            "-framerate", str(fps), "-i", "pipe:0", "-an", "-c:v", "libx264",
+            ffmpeg_exe(), "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgba",
+            "-s:v", f"{width}x{height}", "-framerate", str(fps), "-i", "pipe:0", "-an", "-c:v", "libx264",
             "-preset", str(project.get("export", {}).get("preset", "medium")),
-            *rate_control_args(project), "-pix_fmt", "yuv420p", "-f", "h264", str(path),
+            *rate_control_args(project), "-pix_fmt", "yuv420p", "-f", "matroska", str(path),
         ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errors, creationflags=background_flags())
         try:
-            for index in range(frame_count):
+            def consume(data, index):
                 if cancel_check and cancel_check():
                     raise RuntimeError("Render cancelled")
-                value = float(envelope[index]) if index < len(envelope) else 0.0
-                bands = spectrum.read(index) if spectrum else []
-                data = devtools.evaluate(
-                    f"(async()=>{{window.__vfExportSpectrum={json.dumps(bands)};await VFExport.renderFrame({start_time + index / fps!r},{value!r});"
-                    "return VFExport.canvas().toDataURL('image/png').split(',')[1];})()"
-                )
-                if not isinstance(data, str):
-                    raise RuntimeError("WebGL did not return a canvas frame")
-                encoder.stdin.write(base64.b64decode(data, validate=True))
-                if progress:
-                    progress(.06 + .82 * (index + 1) / frame_count,
-                             f"Rendering frame {index + 1}/{frame_count} (FFmpeg compatibility encoder)")
+                if frame_transform:
+                    data = frame_transform(data, start_time + index / fps)
+                if len(data) != width * height * 4:
+                    raise RuntimeError("Invalid transformed canvas frame size")
+                encoder.stdin.write(data)
+
+            with frame_bridge(_local_origin(project.get('__renderOrigin')), width, height, consume) as (endpoint, state):
+                for batch_start in range(0, frame_count, 8):
+                    if cancel_check and cancel_check():
+                        raise RuntimeError("Render cancelled")
+                    batch_end = min(frame_count, batch_start + 8)
+                    frames = [[start_time + index / fps,
+                               float(envelope[index]) if index < len(envelope) else 0.0,
+                               spectrum.read(index) if spectrum else []]
+                              for index in range(batch_start, batch_end)]
+                    script = (
+                        f"(async()=>{{const frames={json.dumps(frames)};for(const [time,amplitude,bands] of frames){{"
+                        "window.__vfExportSpectrum=bands;await VFExport.renderFrame(time,amplitude);"
+                        "const source=VFExport.canvas();"
+                        "window.__vfRawCanvas ||= document.createElement('canvas');"
+                        f"const c=window.__vfRawCanvas;if(c.width!=={width}||c.height!=={height}){{c.width={width};c.height={height};}}"
+                        "const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(source,0,0,c.width,c.height);"
+                        "const pixels=ctx.getImageData(0,0,c.width,c.height).data;"
+                        f"const response=await fetch({json.dumps(endpoint)},{{method:'POST',body:pixels}});"
+                        "if(!response.ok)throw new Error('Canvas frame transport failed: '+response.status);}})()"
+                    )
+                    try:
+                        devtools.evaluate(script)
+                    except RuntimeError:
+                        if state['error']:
+                            raise RuntimeError(state['error']) from None
+                        raise
+                    if state['error'] or state['frames'] != batch_end:
+                        raise RuntimeError(state['error'] or 'Canvas frame was not received')
+                    if progress:
+                        progress(.06 + .82 * batch_end / frame_count,
+                                 f"Rendering frame {batch_end}/{frame_count} (single-pass encoder)")
             encoder.stdin.close()
             if encoder.wait() != 0:
                 errors.seek(0)
                 raise RuntimeError(f"FFmpeg canvas export failed: {errors.read().decode('utf-8', errors='replace')}")
+            elapsed = time.monotonic() - started
+            log_event("info", "render", f"Single-pass canvas encoding: {frame_count} frames in {elapsed:.2f}s "
+                      f"({frame_count / max(elapsed, .001):.1f} fps); flat lyrics={frame_transform is not None}")
         except Exception:
             if encoder.poll() is None:
                 encoder.kill()
@@ -162,7 +191,8 @@ def render_webgl_video(
     envelope: list[float],
     progress: ProgressCallback | None = None,
     cancel_check: Callable[[], bool] | None = None,
-) -> None:
+    frame_transform=None,
+) -> str:
     """Render the real Odyssey WebGL canvas through Chromium WebCodecs."""
     origin = _local_origin(project.get("__renderOrigin"))
     port = _free_port()
@@ -188,7 +218,7 @@ def render_webgl_video(
         process = subprocess.Popen(
             [
                 str(browser), "--headless=new", "--hide-scrollbars", "--mute-audio",
-                "--enable-webgl", "--use-angle=swiftshader", "--enable-unsafe-swiftshader",
+                "--enable-webgl", "--enable-unsafe-swiftshader",
                 f"--remote-debugging-port={port}", "--remote-allow-origins=*",
                 f"--user-data-dir={profile}", f"--window-size={width},{height}", "about:blank",
             ],
@@ -226,6 +256,13 @@ def render_webgl_video(
                 time.sleep(0.1)
             if not ready:
                 raise RuntimeError("Odyssey WebGL did not initialize in the export browser.")
+            graphics = devtools.evaluate("""(() => {
+              const canvas=document.getElementById('glCanvas');
+              const gl=canvas?.getContext('webgl2') || canvas?.getContext('webgl');
+              const debug=gl?.getExtension('WEBGL_debug_renderer_info');
+              return debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : 'browser-selected renderer';
+            })()""")
+            log_event("info", "render", f"Export graphics: {graphics}")
 
             setup = {
                 "project": clean_project,
@@ -235,7 +272,7 @@ def render_webgl_video(
                 "startTime": float((project.get("exportRange") or {}).get("in", 0)),
                 "frames": frame_count,
                 "bitrate": bitrate,
-                "ffmpeg": custom_bitrate is not None or effects_enabled(project),
+                "ffmpeg": frame_transform is not None or custom_bitrate is not None or effects_enabled(project),
                 "keyInterval": key_interval,
                 "envelope": envelope,
             }
@@ -325,8 +362,8 @@ def render_webgl_video(
                         devtools.evaluate("VFExport.prepare(" + str(width) + "," + str(height) + "," + json.dumps(clean_project) + ")")
                         _encode_canvas_ffmpeg(devtools, project, encoded_path, width=width, height=height,
                                               fps=fps, frame_count=frame_count, envelope=envelope,
-                                              progress=progress, cancel_check=cancel_check)
-                        return
+                                              progress=progress, cancel_check=cancel_check, frame_transform=frame_transform)
+                        return "matroska"
                     break
                 time.sleep(0.25)
 
@@ -339,6 +376,7 @@ def render_webgl_video(
             if not downloaded.exists() or downloaded.stat().st_size == 0:
                 raise RuntimeError("Chrome did not produce the encoded Odyssey video stream.")
             shutil.copyfile(downloaded, encoded_path)
+            return "h264"
         finally:
             if devtools:
                 devtools.close()

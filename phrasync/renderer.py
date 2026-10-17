@@ -292,7 +292,13 @@ def render_project(
     if exact_webgl:
         encoded = output_path.with_suffix(".partial.h264")
         try:
-            render_webgl_video(
+            flat_over_webgl = background.get("textSpace", "flat") != "scene"
+            def composite_flat_frame(raw, timestamp):
+                frame = Image.frombytes("RGBA", (ctx.width, ctx.height), raw)
+                lyric = render_text_layer(ctx, timestamp)
+                return Image.alpha_composite(frame, lyric).tobytes() if lyric is not None else raw
+
+            encoded_format = render_webgl_video(
                 project,
                 encoded,
                 width=ctx.width,
@@ -302,83 +308,26 @@ def render_project(
                 envelope=ctx.envelope.astype(float).tolist(),
                 progress=progress,
                 cancel_check=cancel_check,
+                frame_transform=composite_flat_frame if flat_over_webgl else None,
             )
-            flat_over_webgl = background.get("textSpace", "flat") != "scene"
-            if flat_over_webgl:
-                decoder = subprocess.Popen(
-                    [ffmpeg_exe(), "-v", "error", "-r", str(ctx.fps), "-f", "h264",
-                     "-i", str(encoded), "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    creationflags=background_flags(),
-                )
-                command = [
-                    ffmpeg_exe(), "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
-                    "-s:v", f"{ctx.width}x{ctx.height}", "-r", str(ctx.fps), "-i", "pipe:0",
-                ]
-                if ctx.audio:
-                    command.extend(["-ss", str(ctx.start_time), "-i", ctx.audio.path])
-                command.extend(["-map", "0:v:0"])
-                if ctx.audio:
-                    command.extend(["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"])
-                command.extend([
-                    "-c:v", "libx264", "-preset", str(project.get("export", {}).get("preset", "medium")),
-                    *rate_control_args(project), "-pix_fmt", "yuv420p",
-                    "-t", f"{ctx.duration:.6f}", "-movflags", "+faststart", str(temporary),
-                ])
-                encoder = subprocess.Popen(
-                    command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, creationflags=background_flags()
-                )
-                assert decoder.stdout is not None and encoder.stdin is not None
-                frame_size = ctx.width * ctx.height * 3
-                for frame_index in range(ctx.frame_count):
-                    chunks = bytearray()
-                    while len(chunks) < frame_size:
-                        chunk = decoder.stdout.read(frame_size - len(chunks))
-                        if not chunk:
-                            break
-                        chunks.extend(chunk)
-                    raw = bytes(chunks)
-                    if len(raw) != frame_size:
-                        details = decoder.stderr.read().decode("utf-8", errors="replace") if decoder.stderr else ""
-                        raise RuntimeError(f"WebGL frame decoder stopped early: {details}")
-                    frame = Image.frombytes("RGB", (ctx.width, ctx.height), raw)
-                    lyric = render_text_layer(ctx, ctx.start_time + frame_index / ctx.fps)
-                    if lyric is not None:
-                        frame = Image.alpha_composite(frame.convert("RGBA"), lyric).convert("RGB")
-                    encoder.stdin.write(frame.tobytes())
-                    if progress and frame_index % max(1, ctx.frame_count // 100) == 0:
-                        progress(0.89 + 0.09 * frame_index / ctx.frame_count, "Compositing flat lyrics")
-                encoder.stdin.close()
-                encode_error = encoder.stderr.read().decode("utf-8", errors="replace") if encoder.stderr else ""
-                encode_code = encoder.wait()
-                decoder.stdout.close()
-                decode_error = decoder.stderr.read().decode("utf-8", errors="replace") if decoder.stderr else ""
-                decode_code = decoder.wait()
-                if encode_code != 0 or decode_code != 0:
-                    raise RuntimeError(
-                        f"WebGL composition failed: {encode_error or decode_error or 'unknown error'}"
-                    )
-            else:
-                command = [
-                    ffmpeg_exe(), "-y", "-v", "error", "-r", str(ctx.fps),
-                    "-f", "h264", "-i", str(encoded),
-                ]
-                if ctx.audio:
-                    command.extend(["-ss", str(ctx.start_time), "-i", ctx.audio.path])
-                command.extend(["-map", "0:v:0"])
-                if ctx.audio:
-                    command.extend(["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"])
-                command.extend([
-                    "-c:v", "copy", "-t", f"{ctx.duration:.6f}",
-                    "-movflags", "+faststart", str(temporary),
-                ])
-                if progress:
-                    progress(0.90, "Muxing WebGL video and audio")
-                completed = subprocess.run(command, capture_output=True, text=True, creationflags=background_flags())
-                if completed.returncode != 0:
-                    raise RuntimeError(
-                        f"FFmpeg WebGL mux failed: {completed.stderr.strip() or 'unknown error'}"
-                    )
+            # Flat lyrics are composited before the first encode, not decoded
+            # and encoded again. Both typography paths only need audio muxing.
+            command = [ffmpeg_exe(), "-y", "-v", "error"]
+            if encoded_format != "matroska":
+                command.extend(["-r", str(ctx.fps), "-f", "h264"])
+            command.extend(["-i", str(encoded)])
+            if ctx.audio:
+                command.extend(["-ss", str(ctx.start_time), "-i", ctx.audio.path])
+            command.extend(["-map", "0:v:0"])
+            if ctx.audio:
+                command.extend(["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"])
+            command.extend(["-c:v", "copy", "-t", f"{ctx.duration:.6f}",
+                            "-movflags", "+faststart", str(temporary)])
+            if progress:
+                progress(0.90, "Muxing WebGL video and audio")
+            completed = subprocess.run(command, capture_output=True, text=True, creationflags=background_flags())
+            if completed.returncode != 0:
+                raise RuntimeError(f"FFmpeg WebGL mux failed: {completed.stderr.strip() or 'unknown error'}")
             temporary.replace(output_path)
             if progress:
                 progress(1.0, "Render complete")

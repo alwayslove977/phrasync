@@ -1,3 +1,18 @@
+# Phrasync v0.4.6 — Export reliability and speed
+
+GitHub source release. The matching Microsoft Store package is being prepared for submission; availability follows certification and rollout.
+
+- Fixed preflight incorrectly rejecting valid image/video base types when background footage tracks are enabled. Unknown types, missing footage and invalid clip ranges still fail validation.
+- Export lets Chromium choose hardware graphics with software fallback, rather than forcing SwiftShader for every project.
+- The FFmpeg compatibility path streams bounded raw frames over an authenticated loopback bridge instead of PNG/base64 encoding and decoding every frame. Small deterministic batches reduce browser-control overhead; no frames are skipped.
+- Flat lyrics are composited before encoding, eliminating a second video encode while preserving the existing font and typography renderer.
+- The intermediate video retains frame timestamps before MP4/audio muxing, including B-frames and nonzero IN/OUT ranges.
+- Support logs include the selected graphics renderer and encoding throughput.
+
+Measured locally: the same two-second 1080p30 effects export decreased from 36.7 seconds to approximately 9 seconds. A ten-second sample took 22.4 seconds. These are test-project measurements, not a guarantee of real-time rendering for every project or computer.
+
+---
+
 # Phrasync v0.4.5
 
 GitHub source release; the matching 0.4.5.0 Microsoft Store package was submitted for certification on October 6, 2026. Store availability follows Microsoft's certification and rollout; the previous build remains available until then.

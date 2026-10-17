@@ -1,6 +1,7 @@
 from phrasync.media import run_ffmpeg
 from phrasync.qa import preflight_project
 from phrasync.storage import delete_asset, store_path
+import pytest
 
 
 def base_project():
@@ -26,6 +27,29 @@ def test_preflight_clean_enough_without_audio():
     assert report.ok
     assert any(issue.code == "no_audio" for issue in report.issues)
     assert report.metrics["cueCount"] == 2
+
+
+@pytest.mark.parametrize("background_type", ["dynamic", "image", "video"])
+@pytest.mark.parametrize("text_space", ["flat", "scene"])
+@pytest.mark.parametrize("ranged", [False, True])
+def test_footage_accepts_all_supported_base_types(background_type, text_space, ranged):
+    project = base_project()
+    project["background"].update(type=background_type, textSpace=text_space, footageEnabled=True,
+                                 assetId="stale-base-not-used", tracks=["V1"], clips=[{
+        "id": "ocean", "asset": {"kind": "visual", "settings": {"visual": "scene3d", "sceneKit": "ocean"}},
+        "start": 0, "end": 4}])
+    if ranged:
+        project["exportRange"] = {"in": 1, "out": 3}
+    report = preflight_project(project)
+    assert report.ok, report.public()
+    assert "background_type" not in {issue.code for issue in report.issues}
+
+
+def test_footage_does_not_hide_unknown_types_or_invalid_clips():
+    project = base_project()
+    project["background"].update(type="unknown", footageEnabled=True, clips=[])
+    codes = {issue.code for issue in preflight_project(project).issues}
+    assert {"background_type", "invalid_footage"} <= codes
 
 
 def test_preflight_detects_logic_errors():
