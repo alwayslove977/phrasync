@@ -1,6 +1,6 @@
 # Phrasync v0.4.6 — Export reliability and speed
 
-GitHub source release. The matching Microsoft Store package is being prepared for submission; availability follows certification and rollout.
+GitHub source release. The matching 0.4.6.0 Microsoft Store package was submitted for certification on October 17, 2026; the previous Store build remains available until approval and rollout.
 
 - Fixed preflight incorrectly rejecting valid image/video base types when background footage tracks are enabled. Unknown types, missing footage and invalid clip ranges still fail validation.
 - Export lets Chromium choose hardware graphics with software fallback, rather than forcing SwiftShader for every project.

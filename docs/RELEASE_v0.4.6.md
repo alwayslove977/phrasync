@@ -15,6 +15,6 @@ Verification includes 183 automated tests, source and packaged mixed-track expor
 
 Still free, with local media processing. The [Microsoft Store](https://apps.microsoft.com/detail/9NF9JBG2PKHX) is the Windows installer channel. This GitHub release contains source code, not a separate installer; see the [README](https://github.com/jaydemks/phrasync/blob/main/README.md) for browser and desktop launch instructions.
 
-GitHub and Store use the same version line. The matching 0.4.6.0 Store package is being prepared for submission; the previous Store build remains available until certification and rollout complete.
+GitHub and Store use the same version line. The matching 0.4.6.0 Store package was submitted for certification on October 17, 2026; the previous Store build remains available until certification and rollout complete.
 
 Full history: [RELEASE_NOTES.md](https://github.com/jaydemks/phrasync/blob/main/RELEASE_NOTES.md).
