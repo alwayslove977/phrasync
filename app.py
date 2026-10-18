@@ -45,7 +45,7 @@ from phrasync.media import ffmpeg_exe, probe_duration
 from phrasync.ocr import OCRUnavailable, capability_status as ocr_status, ocr_image
 from phrasync.qa import preflight_project
 from phrasync.storage import delete_asset, get_asset, get_av_asset, list_assets, store_stream, store_chunks
-from phrasync.store_updates import StoreUpdateUnavailable, check_updates, install_updates, package_identity
+from phrasync.store_updates import StoreUpdateUnavailable, check_updates, install_updates, package_identity, bind_window
 from phrasync.server import (
     available_port,
     browser_host,
@@ -599,6 +599,7 @@ def _open_desktop_window(url: str) -> None:
         background_color="#0b0912",
         js_api=desktop_export,
     )
+    bind_window(desktop_export._window)
     # Edge Chromium uses the Windows WebView2 runtime and keeps Phrasync inside
     # its own app window instead of exposing a browser tab to the user.
     webview.start(gui="edgechromium", debug=False, private_mode=False, icon=str(ASSETS_DIR / "Phrasync.ico"))

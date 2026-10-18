@@ -15,6 +15,13 @@ from .jobs import manager
 
 
 class DesktopExportBridge:
+    def open_store_updates(self) -> bool:
+        from .store_updates import package_identity
+        if os.name != "nt" or not package_identity():
+            raise RuntimeError("Microsoft Store updates are only available for the Store installation.")
+        os.startfile("ms-windows-store://pdp/?productid=9NF9JBG2PKHX")
+        return True
+
     def open_external_url(self, url: str) -> bool:
         parsed = urlsplit(url)
         if parsed.scheme != "https" or parsed.netloc not in {"x.com", "www.linkedin.com", "github.com", "buymeacoffee.com", "www.giovannidemiccoli.com"}:

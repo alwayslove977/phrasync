@@ -592,7 +592,7 @@
           <div class="integration-heading"><div><strong>App updates</strong><span id="storeUpdateVersion">Checking installation…</span></div><span class="integration-badge">Microsoft Store</span></div>
           <p>Check for new Phrasync versions and install them through Microsoft Store. Your projects remain on this computer.</p>
           <p id="storeUpdateMessage" role="status" aria-live="polite">Open settings to check the installation.</p>
-          <div class="settings-actions"><button class="button secondary" id="storeUpdateCheck" type="button">Check for updates</button><button class="button primary" id="storeUpdateInstall" type="button" hidden>Install update</button></div>
+          <div class="settings-actions"><button class="button secondary" id="storeUpdateOpen" type="button" hidden>Open Microsoft Store</button><button class="button secondary" id="storeUpdateCheck" type="button">Check for updates</button><button class="button primary" id="storeUpdateInstall" type="button" hidden>Install update</button></div>
         </section>
         <section class="integration-card">
           <div class="integration-heading">
@@ -605,6 +605,14 @@
           <div class="settings-actions"><button class="button secondary danger-text" id="hfTokenRemove" type="button">Remove saved token</button><button class="button primary" id="hfTokenSave" type="button">Save token</button></div>
         </section>
       </div>
+    </form>
+  </dialog>
+
+  <dialog id="storeUpdateConfirm" class="modal" aria-labelledby="storeUpdateConfirmTitle" aria-describedby="storeUpdateConfirmText">
+    <form method="dialog" class="modal-card">
+      <header><div><span class="eyebrow">PHRASYNC · MICROSOFT STORE</span><h2 id="storeUpdateConfirmTitle">Update Phrasync</h2></div></header>
+      <div class="settings-content"><p id="storeUpdateConfirmText">Save your project before continuing. Microsoft Store may close Phrasync to install the update. Your saved projects and media stay on this computer.</p></div>
+      <footer><button class="button secondary" value="cancel" autofocus>Not now</button><button class="button primary" value="install">Install update</button></footer>
     </form>
   </dialog>
 

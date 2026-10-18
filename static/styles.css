@@ -469,6 +469,7 @@ input[type="range"].volume { width: 96px; min-width: 96px; }
 .modal-card h2 { margin: 4px 0 0; font-size: 17px; }
 .eyebrow { color: var(--accent); font-size: 9px; font-weight: 900; letter-spacing: .16em; }
 .modal-card > footer { padding: 12px 17px; display: flex; justify-content: flex-end; border-top: 1px solid var(--border-soft); }
+#storeUpdateConfirm footer { gap: 10px; flex-wrap: wrap; }
 .onboarding-modal { width: min(720px, calc(100vw - 32px)); }
 .onboarding-card > header { align-items: flex-start; gap: 20px; }
 .onboarding-card > header h2 { max-width: 560px; font-size: 23px; line-height: 1.2; }

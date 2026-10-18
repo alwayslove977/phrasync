@@ -1,0 +1,15 @@
+Phrasync 0.4.7.0 — In-app update fixes
+
+This maintenance update focuses on Microsoft Store updates from inside Phrasync.
+
+- Replaced the browser confirmation showing 127.0.0.1 with a branded Phrasync dialog in English/Italian. Not now and Escape safely cancel before installation.
+- Store install requests now start on the Windows UI thread and use the Phrasync window as their owner, addressing defects that could prevent native Store consent and installation.
+- Correctly interpret Store result codes, with separate messages for completion, cancellation, pending installation, low battery and Wi-Fi requirements.
+- Diagnostics retains original native errors and HRESULT codes instead of only a generic failure message.
+- Prevent duplicate install requests; an Open Microsoft Store button provides an explicit fallback.
+
+If your older in-app updater fails, install 0.4.7 through Microsoft Store itself. Uninstalling is not inherently required for this issue. Save your project before any update: Store installation may close the app.
+
+199 automated tests and a real Windows window/thread check passed. Full in-app download/install/restart will be verified with a later Store upgrade, such as 0.4.7 to a future 0.4.8.
+
+All 0.4.6 export improvements remain included. Still free, with local media processing. GitHub/local builds do not install Store updates over source files.
