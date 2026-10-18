@@ -15,6 +15,6 @@ This maintenance release fixes defects in the in-app update flow and makes updat
 
 Still free, with local media processing. Install Windows builds through the [Microsoft Store](https://apps.microsoft.com/detail/9NF9JBG2PKHX). This GitHub release provides source code, not a separate installer; see the [README](https://github.com/jaydemks/phrasync/blob/main/README.md) for local desktop/browser launch instructions.
 
-The matching 0.4.7.0 Store package is being prepared for submission. The previous Store build remains available until certification and rollout complete.
+The matching 0.4.7.0 Store package was submitted for certification on October 18, 2026. The previous Store build remains available until certification and rollout complete.
 
 Full history: [RELEASE_NOTES.md](https://github.com/jaydemks/phrasync/blob/main/RELEASE_NOTES.md).

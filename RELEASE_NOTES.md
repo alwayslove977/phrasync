@@ -1,6 +1,6 @@
 # Phrasync v0.4.7 — Microsoft Store update fixes
 
-GitHub source release. The matching Store package is being prepared for submission. This maintenance update focuses on the in-app Microsoft Store update flow.
+GitHub source release. The matching 0.4.7.0 Store package was submitted for certification on October 18, 2026. Availability follows approval and rollout. This maintenance update focuses on the in-app Microsoft Store update flow.
 
 - Replaced browser-native update confirmation (which displayed the localhost origin) with an accessible, branded Phrasync dialog, with English/Italian text and a safe default cancel action.
 - Initiate Store update installation on the desktop STA/UI thread and bind StoreContext to the actual Phrasync HWND before requesting Store consent. The asynchronous operation is awaited off the UI thread so the desktop stays responsive.

@@ -40,7 +40,7 @@ The editor, timeline, and first-run explanation are shown here:
 
 ## Get Phrasync
 
-**Microsoft Store:** [Install the free Windows app](https://apps.microsoft.com/detail/9NF9JBG2PKHX). The Store build packages the same local editor in a dedicated window with Windows file dialogs and an in-app update check. GitHub and Store releases use the same version line; Store availability follows Microsoft's certification and rollout. The 0.4.7 Windows package is being prepared for submission, so the Store may still offer an earlier version until rollout completes. Check the listing for the version currently available.
+**Microsoft Store:** [Install the free Windows app](https://apps.microsoft.com/detail/9NF9JBG2PKHX). The Store build packages the same local editor in a dedicated window with Windows file dialogs and an in-app update check. GitHub and Store releases use the same version line; Store availability follows Microsoft's certification and rollout. The 0.4.7 Windows package was submitted for certification on October 18, 2026, so the Store may still offer an earlier version until rollout completes. Check the listing for the version currently available.
 
 **GitHub source:** The current source release is [v0.4.7](https://github.com/jaydemks/phrasync/releases/tag/v0.4.7). On Windows, install [Python 3.11 or 3.12](https://www.python.org/downloads/) with its `py` launcher, clone or download the repository, and run `run_windows.bat`. The first launch installs dependencies. For the same editor in your local browser, run `.venv\Scripts\python.exe app.py --external-browser` after setup. The GitHub release has source code, not a ready-to-install Windows package. Linux and macOS launch scripts are included but are not release-tested like Windows.
 
