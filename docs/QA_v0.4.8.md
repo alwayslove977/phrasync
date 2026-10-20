@@ -25,3 +25,7 @@ No real Mac was available. Shared source fixes include macOS discovery/fallback 
 The 0.4.7 updater changes remain included. A real Microsoft Store 0.4.7 to 0.4.8 installation can only be checked after Store approval and rollout; this report does not claim that test has happened.
 
 The new creative suggestions and transparent export remain in the separate feature backlog. Credit Crawl is not integrated in this release.
+
+## Distribution
+
+GitHub v0.4.8 was published on 20 October 2026. Microsoft Partner Center accepted the validated 0.4.8.0 x64 package in Submission 12, ID `1152921505702180738`, and reported In certification after submission on the same date. Publishing is set to begin automatically after certification. This is not confirmation that the update is already available to Store customers.

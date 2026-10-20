@@ -28,6 +28,6 @@ These shared source changes also apply to the macOS code paths, including system
 
 Particle text dissolution, transparent video export and the other proposed creative features are not part of this release. They are recorded in the [feature backlog](https://github.com/jaydemks/phrasync/blob/main/docs/FEATURE_BACKLOG.md). Credit Crawl remains a separate contribution awaiting its author's PR.
 
-Phrasync remains free, with local media processing. [GitHub v0.4.8](https://github.com/jaydemks/phrasync/releases/tag/v0.4.8) provides source code. The [Microsoft Store](https://apps.microsoft.com/detail/9NF9JBG2PKHX) is the Windows installer channel; availability of 0.4.8 follows certification and rollout. The previous approved Store version remains available until then.
+Phrasync remains free, with local media processing. [GitHub v0.4.8](https://github.com/jaydemks/phrasync/releases/tag/v0.4.8) provides source code. The [Microsoft Store](https://apps.microsoft.com/detail/9NF9JBG2PKHX) is the Windows installer channel. The matching 0.4.8.0 package was submitted for certification on October 20, 2026, with automatic publication after approval. The previous approved Store version remains available until rollout completes.
 
 Full history: [RELEASE_NOTES.md](https://github.com/jaydemks/phrasync/blob/main/RELEASE_NOTES.md).

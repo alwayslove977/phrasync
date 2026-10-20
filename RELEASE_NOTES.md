@@ -1,6 +1,6 @@
 # Phrasync v0.4.8
 
-This maintenance update improves timed lyric imports, custom fonts and CJK exports. GitHub source and Microsoft Store packages use the same version line. Store availability follows certification and rollout.
+This maintenance update improves timed lyric imports, custom fonts and CJK exports. GitHub v0.4.8 is published. The matching 0.4.8.0 Microsoft Store package was submitted for certification on October 20, 2026. Store availability follows approval and rollout.
 
 - Import Enhanced LRC word timestamps in angle or inline square brackets, including millisecond precision, repeated line timestamps, offsets, and explicit end boundaries. Standard LRC, SRT, VTT, JSON and plain-text imports remain supported.
 - Preserve supplied timing when importing timed lyrics. Auto-align remains available explicitly; plain-text imports still align automatically.
