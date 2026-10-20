@@ -1,0 +1,13 @@
+Phrasync 0.4.8.0
+
+This maintenance update improves timed lyric imports, custom fonts and exports with Chinese, Japanese and Korean text.
+
+Enhanced LRC import now reads word and syllable timestamps inside each line, including unspaced Chinese text. Timed files keep their supplied timing unless you explicitly choose Auto-align. Enhanced LRC export preserves real word timing, and empty imports no longer replace existing lyrics.
+
+Custom fonts are validated and applied to compatible previews as well as exports. Repeated identical new uploads reuse the same asset, Unicode names are preserved, and saved or local fonts can be selected again. Missing custom fonts and CJK glyph coverage are reported before rendering. Suitable installed, bundled or uploaded fonts are still required.
+
+Importing lyrics clearly replaces the current cues, including the English demo. A confirmed Clear all lyrics action is now available. The desktop app retains its native export-folder chooser; supported local browser installations can now choose a folder through a native dialog too, with manual entry as a fallback.
+
+232 automated Windows tests passed, including real CJK MP4 exports and 2D/3D WebGL exports with IN/OUT ranges. All previous editing tools, export improvements and Store-update fixes remain included. Save your project before updating.
+
+Still free, with local media processing. Proposed new creative features are planned separately and are not included in this maintenance release.

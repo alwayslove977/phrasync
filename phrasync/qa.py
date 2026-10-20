@@ -7,7 +7,7 @@ from typing import Any
 
 from .align import alignment_stats
 from .audio_analysis import analyze_audio
-from .font_utils import resolve_font_path
+from .font_utils import resolve_font_path, load_font_for_text
 from .media import decode_audio_frame, decode_test, decode_video_frame, probe_duration
 from .storage import get_asset, get_av_asset
 from .subtitles import estimate_duration, normalize_cues
@@ -246,11 +246,21 @@ def preflight_project(project: dict[str, Any]) -> CriticReport:
 
     style = project.get("style") or {}
     custom_font = get_asset(style.get("fontAssetId"), "font") if style.get("fontAssetId") else None
+    if style.get("fontAssetId") and not custom_font:
+        report.add("error", "custom_font_missing", "The project's custom font is missing. Upload or select it again before export.")
     font_path = Path(custom_font.path) if custom_font else None
     resolved = resolve_font_path(style.get("fontPreset", "impact"), font_path)
     if not resolved:
         report.add("error", "font_missing", "No usable system or custom font was found.")
     report.metrics["font"] = str(resolved or "")
+    # Fail before rendering, rather than after an apparently completed export.
+    # Validate per token, as the typography renderer chooses fallbacks per word.
+    try:
+        from .kinetic import cue_words
+        for token in dict.fromkeys(word["text"] for cue in cues for word in cue_words(cue)):
+            load_font_for_text(32, style.get("fontPreset", "impact"), token, font_path)
+    except ValueError as exc:
+        report.add("error", "font_coverage", str(exc))
     text_rgb = _hex_rgb(style.get("textColor", "#f3d7ff"), (243, 215, 255))
     estimated_bg = (12, 11, 22)
     contrast = _contrast(text_rgb, estimated_bg)

@@ -9,6 +9,15 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "static"
+
+
+def test_browser_and_desktop_export_folder_controller():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is not installed")
+    result = subprocess.run([node, str(ROOT / "tests/browser_export_folder_ui.cjs")],
+                            cwd=ROOT, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
 APP_SCRIPTS = [
     "diagnostics.js",
     "i18n.js",
@@ -17,6 +26,7 @@ APP_SCRIPTS = [
     "app-ocean.js",
     "app-text-orientation.js",
     "app-ui.js",
+    "app-fonts.js",
     "app-lyrics.js",
     "app-visuals.js",
     "media-effects.js",

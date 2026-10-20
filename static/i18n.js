@@ -290,6 +290,7 @@ const ITALIAN = {
   "Save video to": "Salva il video in",
   "Loading export folder…": "Caricamento cartella di esportazione…",
   "Choose folder": "Scegli cartella",
+  "Enter path manually": "Inserisci percorso manualmente",
   "Open renders folder": "Apri cartella dei video esportati",
   "Open Phrasync default folder": "Apri cartella predefinita di Phrasync",
   "Start export": "Avvia esportazione",

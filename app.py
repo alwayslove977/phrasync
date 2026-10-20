@@ -38,13 +38,14 @@ from phrasync.config import (
 )
 from phrasync.align import align_cues, alignment_stats, estimate_offset
 from phrasync.audio_analysis import AnalysisUnavailable, analyze_audio
-from phrasync.font_utils import font_status
+from phrasync.font_utils import font_status, custom_font_catalog
 from phrasync.jobs import manager
 from phrasync.desktop_export import DesktopExportBridge
+from phrasync.folder_picker import browser_folder_picker, available as folder_picker_available, FolderPickerUnavailable, FolderPickerBusy
 from phrasync.media import ffmpeg_exe, probe_duration
 from phrasync.ocr import OCRUnavailable, capability_status as ocr_status, ocr_image
 from phrasync.qa import preflight_project
-from phrasync.storage import delete_asset, get_asset, get_av_asset, list_assets, store_stream, store_chunks
+from phrasync.storage import delete_asset, get_asset, get_av_asset, list_assets, store_stream, store_chunks, store_path
 from phrasync.store_updates import StoreUpdateUnavailable, check_updates, install_updates, package_identity, bind_window
 from phrasync.server import (
     available_port,
@@ -268,6 +269,20 @@ def assets() -> dict[str, Any]:
     return {"assets": list_assets()}
 
 
+@app.get("/api/fonts")
+def custom_fonts() -> dict[str, Any]:
+    return {"fonts": [{k: v for k, v in font.items() if k != "path"}
+                      for font in custom_font_catalog().values()]}
+
+
+@app.post("/api/fonts/{font_id}/select")
+def select_custom_font(font_id: str) -> dict[str, Any]:
+    font = custom_font_catalog().get(font_id)
+    if not font:
+        raise HTTPException(status_code=404, detail="Font not found. Refresh the saved font list.")
+    return store_path("font", font["path"], font["name"]).public()
+
+
 @app.post("/api/assets/{kind}")
 def upload_asset(kind: str, file: UploadFile = File(...)) -> dict[str, Any]:
     try:
@@ -479,6 +494,42 @@ def export_lyrics(format_name: str, payload: dict[str, Any] = Body(...)):
 def preflight(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     project = payload.get("project", payload)
     return preflight_project(project).public()
+
+
+@app.get("/api/export-folder")
+def export_folder_status(request: Request) -> dict[str, Any]:
+    _require_local_folder_request(request)
+    attached = desktop_export._window is not None
+    return {"available": attached or folder_picker_available(),
+            "directory": desktop_export.get_selected_render_directory() if attached else browser_folder_picker.selected()}
+
+
+@app.post("/api/export-folder/choose")
+async def choose_browser_export_folder(request: Request) -> dict[str, Any]:
+    _require_local_folder_request(request)
+    _require_same_origin(request)
+    try:
+        choose = desktop_export.choose_render_directory if desktop_export._window is not None else browser_folder_picker.choose
+        directory = await run_in_threadpool(choose)
+        return {"directory": directory, "cancelled": directory is None}
+    except FolderPickerBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (FolderPickerUnavailable, RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _require_local_folder_request(request: Request) -> None:
+    _require_local_request(request)
+    # Also reject DNS-rebinding Host names before opening a native window.
+    host = request.url.hostname or ""
+    if host == "localhost":
+        return
+    try:
+        if ipaddress.ip_address(host).is_loopback:
+            return
+    except ValueError:
+        pass
+    raise HTTPException(status_code=403, detail="Folder selection is only available through localhost")
 
 
 @app.post("/api/render")

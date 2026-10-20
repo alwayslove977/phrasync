@@ -86,14 +86,15 @@ async function handleLyricsFile(file) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ assetId: asset.id, duration: projectDuration() })
     });
+    if (!result.cues?.length) throw new Error("No lyrics were found. Check the file's text and timestamp format.");
     project.cues = result.cues;
     selectedCueId = project.cues[0]?.id || null;
     renderCueList(); updateDurationUI(); seekTo(0); scheduleSave();
     setAssetStatus(`Imported ${project.cues.length} ${project.mode === "subtitles" ? "subtitle" : "lyric"} cues.`, "success");
-    // Imported files carry phrase times at best, never word times. Align them
-    // against the song straight away so the result is usable without the user
-    // having to know the Auto-align button exists.
-    await runAutoAlign({ auto: true });
+    // Timed imports are authoritative, including Enhanced LRC word timing.
+    // Only plain text needs automatic alignment; timed files can be aligned
+    // explicitly by the user without silently changing their supplied times.
+    if (/\.txt$/i.test(file.name)) await runAutoAlign({ auto: true });
   } catch (error) {
     setAssetStatus(error.message, "error");
     toast(error.message, "error");
@@ -107,11 +108,7 @@ async function handleFontFile(file) {
   setAssetStatus(`Uploading ${file.name}…`);
   try {
     const asset = await uploadAsset("font", file);
-    project.style.fontAssetId = asset.id;
-    project.style.fontName = asset.name;
-    els.fontPick.textContent = asset.name;
-    scheduleSave();
-    setAssetStatus("Custom font stored for final export. Browser preview uses the closest local font.", "success");
+    await useCustomFont(asset);
   } catch (error) {
     setAssetStatus(error.message, "error");
     toast(error.message, "error");

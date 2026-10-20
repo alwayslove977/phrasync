@@ -276,6 +276,8 @@ window.VFExport = {
     virtualTime = 0;
     if (!els.audioPlayer.paused) els.audioPlayer.pause();
     project = migrateProject(exportProject);
+    // Do not encode frames until the requested font is actually ready.
+    await ensureCustomFont();
     // The server muxes the original audio after the WebGL video pass. Keeping
     // the browser audio detached makes currentPlaybackTime deterministic.
     project.audio = null;

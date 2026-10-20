@@ -327,6 +327,8 @@
               <div class="field"><span>Custom font</span>
                 <input class="visually-hidden" id="fontInput" type="file" accept=".ttf,.otf,.ttc" />
                 <button class="select-like" id="fontPick" type="button">Upload TTF/OTF</button>
+                <select class="select-like" id="fontLibrary" aria-label="Saved and local custom fonts"><option value="">Choose a saved font…</option></select>
+                <button class="select-like" id="resetCustomFont" type="button">Use preset font</button>
               </div>
             </div>
             <label class="range-field"><span>Type size <output id="fontSizeOut">160</output></span><input id="fontSize" type="range" min="40" max="280" value="160" /></label>
@@ -474,6 +476,7 @@
         </div>
 
         <div class="timeline-tools">
+          <button type="button" id="clearLyricsButton" aria-label="Clear all lyrics" title="Clear all lyrics">Clear</button>
           <button type="button" id="sortCuesButton">Sort</button>
           <button type="button" id="nudgeBackButton">−0.1s</button>
           <button type="button" id="nudgeForwardButton">+0.1s</button>
@@ -486,6 +489,7 @@
           </select>
           <button type="button" id="exportSrtButton">Export</button>
         </div>
+        <p class="microcopy">Import replaces the current lyrics, including the English demo. Timed files keep their supplied timing; use Auto-align only if needed.</p>
 
         <div class="cue-list" id="cueList"></div>
 
@@ -637,6 +641,7 @@
         <input id="renderDirectoryInput" type="text" hidden aria-label="Export folder path" placeholder="Enter an existing absolute folder path" />
         <div class="render-destination-actions">
           <button class="button secondary" id="chooseRenderDirectory" type="button">Choose folder</button>
+          <button class="button secondary" id="manualRenderDirectory" type="button" hidden>Enter path manually</button>
           <button class="button secondary" id="openRenderDirectory" type="button">Open renders folder</button>
           <button class="button secondary" id="openDefaultRenderDirectory" type="button">Open Phrasync default folder</button>
         </div>
@@ -666,6 +671,7 @@
   <script src="/static/app-ocean.js" defer></script>
   <script src="/static/app-text-orientation.js" defer></script>
   <script src="/static/app-ui.js" defer></script>
+  <script src="/static/app-fonts.js" defer></script>
   <script src="/static/app-lyrics.js" defer></script>
   <script src="/static/app-visuals.js" defer></script>
   <script src="/static/media-effects.js" defer></script>

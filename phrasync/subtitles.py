@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from bisect import bisect_right
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,13 @@ SRT_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 LRC_RE = re.compile(r"\[(?P<min>\d{1,3}):(?P<sec>\d{1,2}(?:[.:]\d{1,3})?)\](?P<text>.*)")
+LRC_TIME = r"\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?"
+LRC_TAG = re.compile(rf"\[({LRC_TIME})\]|<({LRC_TIME})>")
+
+
+def _lrc_seconds(value: str) -> float:
+    minutes, seconds = value.split(":", 1)
+    return int(minutes) * 60 + float(seconds.replace(":", "."))
 
 
 def parse_timestamp(value: str) -> float:
@@ -105,27 +113,81 @@ def parse_vtt(text: str) -> list[dict[str, Any]]:
 
 
 def parse_lrc(text: str, default_duration: float = 3.0) -> list[dict[str, Any]]:
-    points: list[tuple[float, str]] = []
+    # Leading square tags may repeat a line. Inline square/angle tags mark
+    # word starts; an empty final tag supplies the final word's end.
+    points: list[dict[str, Any]] = []
+    offset_match = re.search(r"\[offset:([+-]?\d+)\]", text, re.IGNORECASE)
+    offset = int(offset_match[1]) / 1000 if offset_match else 0.0
     for line in text.replace("\r\n", "\n").split("\n"):
-        match = LRC_RE.match(line.strip())
-        if not match:
+        line = line.strip().lstrip("\ufeff")
+        tags = list(LRC_TAG.finditer(line))
+        if not tags or tags[0].start() != 0:
             continue
-        seconds_text = match.group("sec").replace(":", ".")
-        start = int(match.group("min")) * 60 + float(seconds_text)
-        lyric = match.group("text").strip()
-        if lyric:
-            points.append((start, lyric))
-    points.sort(key=lambda item: item[0])
+        leading = []
+        cursor = 0
+        for tag in tags:
+            if tag.start() != cursor or tag[1] is None:
+                break
+            leading.append(tag)
+            cursor = tag.end()
+        inline = list(LRC_TAG.finditer(line, cursor))
+        starts = [_lrc_seconds(tag[1]) + offset for tag in leading]
+        start = starts[0] if starts else _lrc_seconds(tags[0][2]) + offset
+        if not inline and leading:
+            lyric = line[cursor:].strip()
+            points.extend({"start": max(0, t), "text": lyric, "words": []} for t in starts)
+            continue
+        segments = []
+        boundary = None
+        # Include an untagged first word following the phrase timestamp.
+        if leading and line[cursor:inline[0].start()].strip():
+            segments.append((start, line[cursor:inline[0].start()].strip()))
+        for i, tag in enumerate(inline if leading else tags):
+            source = inline if leading else tags
+            finish = source[i + 1].start() if i + 1 < len(source) else len(line)
+            token = line[tag.end():finish].strip()
+            timestamp = _lrc_seconds(tag[1] or tag[2]) + offset
+            if segments and timestamp < segments[-1][0]:
+                raise ValueError("Enhanced LRC word timestamps must be in chronological order")
+            if token:
+                segments.append((timestamp, token))
+                boundary = None
+            else:
+                boundary = timestamp
+        if not segments:
+            continue
+        lyric = LRC_TAG.sub("", line[cursor:] if leading else line).strip()
+        for repeated_start in starts or [start]:
+            shift = repeated_start - start
+            points.append({"start": max(0, repeated_start), "text": lyric,
+                           "segments": [(t + shift, token) for t, token in segments],
+                           "boundary": boundary + shift if boundary is not None else None})
+    points.sort(key=lambda item: item["start"])
+    point_starts = [point["start"] for point in points]
     cues: list[dict[str, Any]] = []
-    for index, (start, lyric) in enumerate(points):
-        next_start = points[index + 1][0] if index + 1 < len(points) else start + default_duration
+    for index, point in enumerate(points):
+        if not point["text"]:
+            continue
+        start = point["start"]
+        following = bisect_right(point_starts, start)
+        next_start = point_starts[following] if following < len(points) else start + default_duration
+        end = max(start + 0.05, next_start - 0.03)
+        segments = point.get("segments", [])
+        if segments:
+            end = max(end, segments[-1][0] + 0.05)
+        if point.get("boundary") is not None:
+            end = max(start + 0.05, point["boundary"])
+        words = [{"text": token, "start": max(start, timestamp),
+                  "end": segments[i + 1][0] if i + 1 < len(segments) else end}
+                 for i, (timestamp, token) in enumerate(segments)]
         cues.append(
             normalize_cue(
                 {
                     "id": f"cue-{index + 1}",
                     "start": start,
-                    "end": max(start + 0.35, next_start - 0.03),
-                    "text": lyric,
+                    "end": end,
+                    "text": point["text"],
+                    "words": words,
                 },
                 index,
             )
@@ -218,24 +280,24 @@ def cues_to_enhanced_lrc(cues: list[dict[str, Any]]) -> str:
     Plain LRC throws the word timings away, which is most of what this app
     knows about a song.
     """
-    from .kinetic import cue_words
-
     lines = []
     for cue in normalize_cues(cues):
-        words = cue_words(cue)
+        # Do not invent word-level timing when the imported cue has none.
+        words = cue.get("words") or []
         if not words:
             lines.append(f"{format_lrc_time(cue['start'])}{cue['text']}")
             continue
         parts = [format_lrc_time(cue['start'])]
         for word in words:
             parts.append("<" + format_lrc_time(word["start"]).strip("[]") + ">" + word["text"] + " ")
+        parts.append("<" + format_lrc_time(words[-1]["end"]).strip("[]") + ">")
         lines.append("".join(parts).rstrip())
     return "\n".join(lines) + "\n"
 
 
 def cues_to_ass(cues: list[dict[str, Any]], style: dict[str, Any] | None = None,
                 canvas: dict[str, Any] | None = None) -> str:
-    """Advanced SubStation Alpha with \k karaoke timing.
+    r"""Advanced SubStation Alpha with \k karaoke timing.
 
     This is the one interchange format that carries word-level timing into a
     real video pipeline — Aegisub, mpv, ffmpeg burn-in, Premiere and Resolve via

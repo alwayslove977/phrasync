@@ -3,9 +3,14 @@
 let completedRenderJob = null;
 let selectedRenderDirectory = null;
 let renderStarting = false;
+let choosingRenderDirectory = false;
 
 function desktopExportApi() {
   return window.pywebview?.api || null;
+}
+
+function showManualRenderDirectory() {
+  els.renderDirectoryInput.hidden = false; els.renderDirectoryInput.focus();
 }
 
 async function openRenderDialog() {
@@ -19,10 +24,11 @@ async function openRenderDialog() {
     : t("Full timeline");
   completedRenderJob = null;
   if (!els.renderDialog.open) els.renderDialog.showModal();
-  els.chooseRenderDirectory.hidden = !IS_DESKTOP_HOST;
+  els.chooseRenderDirectory.hidden = false;
   els.openRenderDirectory.hidden = !IS_DESKTOP_HOST;
   els.openDefaultRenderDirectory.hidden = !IS_DESKTOP_HOST;
-  els.renderDirectoryInput.hidden = IS_DESKTOP_HOST;
+  els.renderDirectoryInput.hidden = true;
+  document.getElementById("manualRenderDirectory").hidden = IS_DESKTOP_HOST;
   els.downloadRender.textContent = t("Show exported MP4");
   if (IS_DESKTOP_HOST) {
     try {
@@ -33,16 +39,42 @@ async function openRenderDialog() {
       toast(error.message, "error");
     }
   } else {
-    els.renderDirectory.textContent = t("Choose where to save your exports before starting a render.");
+    try {
+      const status = await api("/api/export-folder");
+      selectedRenderDirectory = els.renderDirectoryInput.value.trim() || status.directory || null;
+      els.renderDirectoryInput.value = selectedRenderDirectory || "";
+      els.renderDirectory.textContent = selectedRenderDirectory || t("Choose where to save your exports before starting a render.");
+      els.chooseRenderDirectory.hidden = !status.available;
+      els.renderDirectoryInput.hidden = Boolean(status.available);
+    } catch (_) {
+      els.chooseRenderDirectory.hidden = true;
+      els.renderDirectoryInput.hidden = false;
+      els.renderDirectory.textContent = els.renderDirectoryInput.value.trim() || t("Choose where to save your exports before starting a render.");
+    }
   }
 }
 
 async function chooseRenderDirectory() {
+  if (choosingRenderDirectory || currentRenderJob || renderStarting) return;
+  choosingRenderDirectory = true;
+  els.chooseRenderDirectory.disabled = true;
+  els.confirmRender.disabled = true;
   try {
-    const directory = await desktopExportApi().choose_render_directory();
-    if (directory) { selectedRenderDirectory = directory; els.renderDirectory.textContent = directory; }
+    const directory = IS_DESKTOP_HOST
+      ? await desktopExportApi().choose_render_directory()
+      : (await api("/api/export-folder/choose", { method: "POST" })).directory;
+    if (directory) {
+      selectedRenderDirectory = directory; els.renderDirectory.textContent = directory;
+      els.renderDirectoryInput.value = directory;
+      if (!IS_DESKTOP_HOST) els.renderDirectoryInput.hidden = true;
+    }
   } catch (error) {
+    if (!IS_DESKTOP_HOST) els.renderDirectoryInput.hidden = false;
     toast(error.message, "error");
+  } finally {
+    choosingRenderDirectory = false;
+    els.chooseRenderDirectory.disabled = false;
+    els.confirmRender.disabled = false;
   }
 }
 
@@ -87,7 +119,7 @@ function resetRenderModal() {
 }
 
 async function startRender() {
-  if (currentRenderJob || renderStarting) return;
+  if (currentRenderJob || renderStarting || choosingRenderDirectory) return;
   const directory = IS_DESKTOP_HOST ? selectedRenderDirectory : els.renderDirectoryInput.value.trim();
   if (!directory) {
     toast(t("Choose where to save your exports before starting a render."), "error"); return;

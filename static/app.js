@@ -264,6 +264,7 @@ function bindControls() {
 
   els.renderClose.addEventListener("click", () => els.renderDialog.close());
   els.chooseRenderDirectory.addEventListener("click", chooseRenderDirectory);
+  document.getElementById("manualRenderDirectory").addEventListener("click", showManualRenderDirectory);
   els.openRenderDirectory.addEventListener("click", openRenderDirectory);
   els.openDefaultRenderDirectory.addEventListener("click", openDefaultRenderDirectory);
   els.confirmRender.addEventListener("click", startRender);

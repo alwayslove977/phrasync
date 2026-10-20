@@ -1,3 +1,20 @@
+# Phrasync v0.4.8
+
+This maintenance update improves timed lyric imports, custom fonts and CJK exports. GitHub source and Microsoft Store packages use the same version line. Store availability follows certification and rollout.
+
+- Import Enhanced LRC word timestamps in angle or inline square brackets, including millisecond precision, repeated line timestamps, offsets, and explicit end boundaries. Standard LRC, SRT, VTT, JSON and plain-text imports remain supported.
+- Preserve supplied timing when importing timed lyrics. Auto-align remains available explicitly; plain-text imports still align automatically.
+- Preserve word/syllable boundaries for unspaced CJK lyrics in both preview and offline rendering. Enhanced LRC export retains real word timing and final word boundaries, without inventing word tags for untimed lines.
+- Validate uploaded fonts, preserve Unicode display filenames, and reuse identical new font uploads instead of storing another copy. Existing assets are not deleted or migrated.
+- Load custom TTF/OTF fonts into preview as well as export, restore them with projects, offer saved/local font selection and an explicit return to preset fonts. Unsupported browser font formats produce a visible preview warning.
+- Search installed, bundled, local and uploaded fonts for Chinese, Japanese and Korean fallback coverage. Report missing coverage during preflight with required characters and font-check counts instead of a misleading Japanese-only export error.
+- Clarify that importing lyrics replaces the current cues, including the English demo. Add an explicit, confirmed Clear all lyrics action.
+- The local browser edition now offers a native Choose folder dialog for MP4 exports, with cancellation preserving the previous destination, duplicate-dialog protection, and manual-path fallback. The desktop window retains its existing native bridge. No browser directory-upload trick, intermediate video copy or external service is required.
+
+Particle-dissolve animation and alpha/transparent video export are separate feature requests and are not included here. Credit Crawl is awaiting its author's PR. macOS fixes require confirmation on a real Mac; local runtime tests were performed on Windows.
+
+---
+
 # Phrasync v0.4.7 — Microsoft Store update fixes
 
 GitHub source release. The matching 0.4.7.0 Store package was submitted for certification on October 18, 2026. Availability follows approval and rollout. This maintenance update focuses on the in-app Microsoft Store update flow.

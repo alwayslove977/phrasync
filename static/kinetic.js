@@ -200,9 +200,12 @@
    * duration far more musically than equal slots do.
    */
   function cueWords(cue) {
-    const tokens = String(cue.text || "").replace(/\n/g, " ").split(/\s+/).filter(Boolean);
+    let tokens = String(cue.text || "").replace(/\n/g, " ").split(/\s+/).filter(Boolean);
     if (!tokens.length) return [];
     const stored = Array.isArray(cue.words) ? cue.words.filter(w => w && String(w.text || "").trim()) : [];
+    if (stored.length && stored.map(w => w.text).join("").replace(/\s+/g, "") === String(cue.text || "").replace(/\s+/g, "")) {
+      tokens = stored.map(w => String(w.text).trim());
+    }
     const start = Number(cue.start) || 0;
     const end = Math.max(start + 0.2, Number(cue.end) || start + 1);
 

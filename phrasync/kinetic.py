@@ -135,6 +135,10 @@ def cue_words(cue: dict[str, Any]) -> list[dict[str, Any]]:
     if not tokens:
         return []
     stored = [w for w in (cue.get("words") or []) if str(w.get("text", "")).strip()]
+    # Enhanced LRC can time individual CJK characters/syllables without spaces.
+    # Preserve those boundaries instead of discarding them as a token mismatch.
+    if stored and re.sub(r"\s+", "", "".join(str(w["text"]) for w in stored)) == re.sub(r"\s+", "", str(cue.get("text", ""))):
+        tokens = [str(w["text"]).strip() for w in stored]
     start = float(cue.get("start", 0.0) or 0.0)
     end = max(start + 0.2, float(cue.get("end", start + 1) or start + 1))
 

@@ -23,7 +23,7 @@ function cueSignature(cue, spec) {
   const words = K().cueWords(cue);
   return [
     cue.id, spec.layout, project.style.uppercase ? "u" : "l",
-    project.style.fontSize, project.style.maxWidth, project.style.fontPreset,
+    project.style.fontSize, project.style.maxWidth, project.style.fontPreset, project.style.fontAssetId,
     words.map(word => `${word.text}@${word.start.toFixed(3)}-${word.end.toFixed(3)}`).join("|")
   ].join("::");
 }
@@ -129,7 +129,7 @@ function renderLyric(force = false) {
 function lyricStyleFor3D() {
   const style = project.style;
   return {
-    font: fontStacks[style.fontPreset] || fontStacks.impact,
+    font: lyricFontStack(style),
     color: style.textColor,
     accent: style.accentColor,
     stroke: style.strokeColor,

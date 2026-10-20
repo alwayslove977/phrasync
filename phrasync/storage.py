@@ -4,11 +4,14 @@ import json
 import re
 import shutil
 import uuid
+import hashlib
+import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import AsyncIterable, BinaryIO
 
 from starlette.concurrency import run_in_threadpool
+from PIL import ImageFont
 
 from .config import (
     MAX_UPLOAD_BYTES,
@@ -48,6 +51,35 @@ _KIND_EXTENSIONS = {
     "font": SUPPORTED_FONT,
     "lyrics": SUPPORTED_LYRICS,
 }
+_font_lock = threading.Lock()
+
+
+def _finish_asset(asset: Asset) -> Asset:
+    """Validate and content-address fonts, keeping other asset IDs unchanged."""
+    if asset.kind == "font":
+        path = Path(asset.path)
+        try:
+            ImageFont.truetype(str(path), 24).getname()
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            with _font_lock:
+                target = UPLOADS_DIR / f"font-{digest}{asset.extension}"
+                if target.exists():
+                    path.unlink()
+                else:
+                    path.rename(target)
+                asset.id = target.name
+                asset.path = str(target)
+                # Preserve a Unicode display name; the storage path remains a hash.
+                asset.name = Path(asset.name).name
+                _metadata_path(asset.id).write_text(json.dumps(asdict(asset), indent=2), encoding="utf-8")
+            from .font_utils import refresh_fonts
+            refresh_fonts()
+            return asset
+        except Exception as exc:
+            path.unlink(missing_ok=True)
+            raise ValueError(f"Could not load font. Choose a valid TTF, OTF or TTC file: {exc}") from exc
+    _metadata_path(asset.id).write_text(json.dumps(asdict(asset), indent=2), encoding="utf-8")
+    return asset
 
 
 def sanitize_name(name: str) -> str:
@@ -97,13 +129,12 @@ def store_stream(kind: str, filename: str, stream: BinaryIO) -> Asset:
     asset = Asset(
         id=asset_id,
         kind=kind,
-        name=clean_name,
+        name=Path(filename).name if kind == "font" else clean_name,
         path=str(destination),
         size=size,
         extension=ext,
     )
-    _metadata_path(asset_id).write_text(json.dumps(asdict(asset), indent=2), encoding="utf-8")
-    return asset
+    return _finish_asset(asset)
 
 
 def store_path(kind: str, source: Path, original_name: str | None = None) -> Asset:
@@ -116,13 +147,12 @@ def store_path(kind: str, source: Path, original_name: str | None = None) -> Ass
     asset = Asset(
         id=asset_id,
         kind=kind,
-        name=clean_name,
+        name=Path(name).name if kind == "font" else clean_name,
         path=str(destination),
         size=destination.stat().st_size,
         extension=ext,
     )
-    _metadata_path(asset_id).write_text(json.dumps(asdict(asset), indent=2), encoding="utf-8")
-    return asset
+    return _finish_asset(asset)
 
 
 def get_asset(asset_id: str | None, expected_kind: str | None = None) -> Asset | None:
@@ -165,9 +195,8 @@ async def store_chunks(kind: str, filename: str, chunks: AsyncIterable[bytes], e
             raise ValueError("Upload was interrupted; please import the file again")
         if not size:
             raise ValueError("The uploaded file is empty")
-        asset = Asset(asset_id, kind, clean_name, str(destination), size, ext)
-        await run_in_threadpool(metadata.write_text, json.dumps(asdict(asset), indent=2), encoding="utf-8")
-        return asset
+        asset = Asset(asset_id, kind, Path(filename).name if kind == "font" else clean_name, str(destination), size, ext)
+        return await run_in_threadpool(_finish_asset, asset)
     except BaseException:
         destination.unlink(missing_ok=True)
         metadata.unlink(missing_ok=True)
