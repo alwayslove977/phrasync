@@ -4,6 +4,16 @@ const LANGUAGE_KEY = "phrasync.language";
 const ONBOARDING_KEY = "phrasync.onboarding.v2";
 
 const ITALIAN = {
+  "Microsoft Store could not download the update. Refreshing the request and trying once more…": "Microsoft Store non ha scaricato l'aggiornamento. Aggiorno la richiesta e riprovo una sola volta…",
+  "Update progress": "Avanzamento aggiornamento",
+  "Waiting for Microsoft Store…": "In attesa di Microsoft Store…",
+  "Review update": "Visualizza aggiornamento",
+  "Save your project before installing. You can keep working and update later from Settings.": "Salva il progetto prima di installare. Puoi continuare a lavorare e aggiornare più tardi dalle Impostazioni.",
+  "Microsoft Store reports installation complete. Close Phrasync and reopen it from Start. The new version will be verified at launch.": "Microsoft Store segnala l'installazione completata. Chiudi Phrasync e riaprilo da Start. La nuova versione sarà verificata all'avvio.",
+  "Installation could not be verified. Open Microsoft Store to review the update before restarting.": "Impossibile verificare l'installazione. Apri Microsoft Store per controllare l'aggiornamento prima di riavviare.",
+  "The previous update was not applied. Check again or open Microsoft Store. Your installed version is unchanged.": "L'aggiornamento precedente non è stato applicato. Controlla di nuovo o apri Microsoft Store. La versione installata è invariata.",
+  "The updated package is now running.": "Il pacchetto aggiornato è ora in esecuzione.",
+  "Microsoft Store/Windows Update could not download the update. Try again later or open Microsoft Store. Your installed version is unchanged.": "Microsoft Store/Windows Update non ha scaricato l'aggiornamento. Riprova più tardi o apri Microsoft Store. La versione installata è invariata.",
   "Error code:": "Codice errore:",
   "The Microsoft Store update service is unavailable on this device.": "Il servizio di aggiornamento Microsoft Store non è disponibile su questo dispositivo.",
   "Could not check Microsoft Store for updates. Try again later or open the Store listing.": "Impossibile verificare gli aggiornamenti Microsoft Store. Riprova più tardi oppure apri la pagina dello Store.",

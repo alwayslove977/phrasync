@@ -41,7 +41,7 @@ class FakeStore:
     def request_download_and_install_store_package_updates_async(self, updates):
         assert threading.get_ident() == state['thread']
         assert updates == ['synthetic-update']
-        return 'synthetic-operation'
+        return SimpleNamespace(progress=None)
 
 original_context, original_owner = store_updates._context, store_updates._initialize_owner
 try:
@@ -56,7 +56,7 @@ try:
         state['ownerInitialized'] = True
     store_updates._initialize_owner = owner
     result = asyncio.run(asyncio.to_thread(store_updates._start_install_on_ui,['synthetic-update']))
-    assert result[1] == 'synthetic-operation' and state['ownerInitialized']
+    assert result[1].progress is store_updates._on_progress and state['ownerInitialized']
     print(json.dumps({'staDispatch':True,'realStoreOwnerInitialized':True,'storeInstallationRequested':False}),flush=True)
 finally:
     store_updates._context, store_updates._initialize_owner = original_context, original_owner

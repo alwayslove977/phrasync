@@ -474,6 +474,9 @@ input[type="range"].volume { width: 96px; min-width: 96px; }
 .onboarding-card > header { align-items: flex-start; gap: 20px; }
 .onboarding-card > header h2 { max-width: 560px; font-size: 23px; line-height: 1.2; }
 .onboarding-content { padding: 22px 24px 10px; }
+.onboarding-content > a.button { display: inline-flex; margin: 22px 0; }
+.store-update-progress { display: block; width: 100%; margin: 12px 0; accent-color: var(--accent); }
+.store-update-progress[hidden] { display: none; }
 .onboarding-content > h3 { margin: 10px 0 8px; font-size: 19px; }
 .onboarding-content > p { margin: 0; color: var(--muted); line-height: 1.55; }
 .onboarding-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; color: #07110e; background: var(--success); font-size: 23px; box-shadow: 0 12px 30px rgba(101,228,177,.18); }

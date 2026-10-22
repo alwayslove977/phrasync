@@ -7,15 +7,19 @@ class Element extends EventTarget {
   click() { this.dispatchEvent(new Event('click')); }
   showModal() { assert.equal(this.open, false); this.open = true; }
   close(value = '') { this.returnValue = value; this.open = false; this.dispatchEvent(new Event('close')); }
+  removeAttribute(name) { delete this[name]; }
 }
 const elements = new Map();
 const $ = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
 const document = new EventTarget(); document.getElementById = $;
+document.querySelector = () => null;
+const scheduled = [];
 let installCalls = 0, storeCalls = 0, nextState = 'completed', completeInstall;
 const fetch = async path => {
   let data;
   if (path.endsWith('/status')) data = {packaged: true, version: '0.4.7'};
   else if (path.endsWith('/check')) data = {available: true};
+  else if (path.endsWith('/progress')) data = {busy: true, state: 'downloading', percent: 47};
   else {
     installCalls++;
     await new Promise(resolve => { completeInstall = resolve; });
@@ -24,10 +28,14 @@ const fetch = async path => {
   return {ok: true, json: async () => data};
 };
 const window = {t: value => value, pywebview: {api: {open_store_updates: async () => { storeCalls++; }}}};
-vm.runInNewContext(fs.readFileSync('static/store-updates.js', 'utf8'), {document, window, fetch});
+vm.runInNewContext(fs.readFileSync('static/store-updates.js', 'utf8'), {document, window, fetch, setTimeout: (fn, ms) => { scheduled.push({fn, ms}); return scheduled.length; }, clearTimeout: () => {}});
 const tick = () => new Promise(resolve => setImmediate(resolve));
 async function run() {
   document.dispatchEvent(new Event('DOMContentLoaded'));
+  await scheduled.find(item => item.ms === 1500).fn();
+  assert.equal($('storeUpdateAvailable').open, true);
+  assert.equal(installCalls, 0); // Startup notification never installs without consent.
+  $('storeUpdateAvailable').close('later');
   $('settingsButton').click(); await tick();
   assert.equal($('storeUpdateVersion').textContent, 'Phrasync 0.4.7');
   $('storeUpdateCheck').click(); await tick();
@@ -43,11 +51,15 @@ async function run() {
   $('storeUpdateInstall').click(); $('storeUpdateInstall').click(); await tick();
   $('storeUpdateConfirm').close('install'); await tick();
   assert.equal(installCalls, 1);
+  await scheduled.find(item => item.ms === 700).fn();
+  assert.equal($('storeUpdateProgress').value, 47);
+  assert.match($('storeUpdateMessage').textContent, /47%/);
   assert.equal($('storeUpdateCheck').disabled, true);
   $('settingsButton').click(); $('storeUpdateInstall').click(); await tick();
   assert.equal(installCalls, 1); // Reopening Settings or double click cannot duplicate.
   completeInstall(); await tick();
-  assert.match($('storeUpdateMessage').textContent, /Update installed/);
+  assert.match($('storeUpdateMessage').textContent, /will be verified at launch/);
+  assert.equal($('storeUpdateProgress').hidden, true);
   assert.equal($('storeUpdateInstall').hidden, true);
   for (const state of ['canceled', 'low-battery', 'wifi-required', 'other-error']) {
     $('storeUpdateCheck').click(); await tick();

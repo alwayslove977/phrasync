@@ -1,6 +1,6 @@
 [project]
 name = "phrasync"
-version = "0.4.8"
+version = "0.4.9"
 description = "Local AI studio for multilingual lyric videos and subtitles with word-level timing, kinetic typography, and MP4 export."
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}

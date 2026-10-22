@@ -1,3 +1,23 @@
+# Phrasync v0.4.9
+
+This maintenance release improves in-app Microsoft Store updates. The matching Windows installer is distributed through Microsoft Store after certification and rollout.
+
+Individual package results and Store queue states are checked before reporting completion. A failed package no longer produces a misleading success or restart message. Original HRESULT error codes remain visible in Diagnostics.
+
+For the observed Windows Update download fault 0x80244007, refresh the Store query and retry once. Cancellation is never retried automatically, and persistent failures offer the official Store fallback.
+
+Show real Store download and installation progress, with an indeterminate indicator when Microsoft has not supplied a percentage. Check at startup and offer an update notification without installing automatically or covering an existing welcome dialog.
+
+Record update attempts locally and verify the running package after relaunch. Register the packaged executable for Windows-managed restart during patching, without relaunching an old WindowsApps path or registering a source Python interpreter.
+
+Improve spacing around the welcome dialog's optional Buy me a coffee button. Existing editing and export features remain unchanged.
+
+246 automated Windows tests passed. The original Store failure was reproduced and that installation was successfully updated from 0.4.7 to 0.4.8 through Microsoft Store without uninstalling. The new 0.4.9 recovery and restart flow still needs confirmation with a subsequent Store-distributed update. Persistent Microsoft service failures cannot be guaranteed away by app code.
+
+If your older in-app updater cannot install this release, update through Microsoft Store directly. A routine uninstall is not required for this fix. Full notes: [docs/RELEASE_v0.4.9.md](docs/RELEASE_v0.4.9.md).
+
+---
+
 # Phrasync v0.4.8
 
 This maintenance update improves timed lyric imports, custom fonts and CJK exports. GitHub v0.4.8 is published. The matching 0.4.8.0 Microsoft Store package was submitted for certification on October 20, 2026. Store availability follows approval and rollout.

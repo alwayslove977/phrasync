@@ -12,6 +12,12 @@ import app as app_module
 from phrasync import store_updates
 
 
+@pytest.fixture(autouse=True)
+def isolated_update_receipt(monkeypatch, tmp_path):
+    monkeypatch.setattr(store_updates, '_receipt', tmp_path / 'store-update.json')
+    monkeypatch.setattr(store_updates, '_progress', {'busy': False, 'state': 'idle', 'percent': None})
+
+
 class FakeStore:
     def __init__(self, updates):
         self.updates = updates
@@ -23,7 +29,7 @@ class FakeStore:
     async def request_download_and_install_store_package_updates_async(self, updates):
         assert updates == self.updates
         self.install_calls += 1
-        return SimpleNamespace(overall_state="Completed")
+        return SimpleNamespace(overall_state="Completed", store_package_update_statuses=[SimpleNamespace(package_update_state=3)])
 
 
 def test_portable_preview_never_calls_store(monkeypatch):
@@ -31,7 +37,7 @@ def test_portable_preview_never_calls_store(monkeypatch):
     monkeypatch.setattr(app_module, "_require_local_request", lambda request: None)
     client = TestClient(app_module.app)
     from phrasync.config import APP_VERSION
-    assert client.get("/api/store-updates/status").json() == {"version": APP_VERSION, "packaged": False}
+    assert client.get("/api/store-updates/status").json() == {"version": APP_VERSION, "packaged": False, "previous_update": None}
     assert client.post("/api/store-updates/check", headers={"Origin": "http://testserver"}).status_code == 503
     assert client.post("/api/store-updates/install", headers={"Origin": "http://testserver"}).status_code == 503
     assert client.post("/api/store-updates/install", headers={"Origin": "https://other.example"}).status_code == 403
@@ -73,7 +79,7 @@ def test_install_binds_owner_before_initiating_on_ui(monkeypatch):
         def Invoke(self, callback):
             calls.append('ui')
             callback()
-    sentinel = object()
+    sentinel = SimpleNamespace()
     fake = SimpleNamespace(request_download_and_install_store_package_updates_async=lambda updates: calls.append(('request',updates)) or sentinel)
     monkeypatch.setattr(store_updates, '_window', SimpleNamespace(native=Native()))
     monkeypatch.setattr(store_updates, '_context', lambda: calls.append('context') or fake)
@@ -112,7 +118,7 @@ def test_duplicate_install_requests_are_rejected(monkeypatch):
     monkeypatch.setattr(store_updates,'_context',lambda:fake)
     async def finish():
         await asyncio.to_thread(release.wait,5)
-        return SimpleNamespace(overall_state=3)
+        return SimpleNamespace(overall_state=3, store_package_update_statuses=[SimpleNamespace(package_update_state=3)])
     def start(_):
         entered.set()
         return fake,finish()
@@ -157,3 +163,96 @@ def test_update_controller_consent_and_result_flow():
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run([node,str(root/'tests/store_updates_ui.cjs')],cwd=root,capture_output=True,text=True)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_overall_completed_cannot_hide_failed_package():
+    result = SimpleNamespace(overall_state=3, store_package_update_statuses=[SimpleNamespace(package_update_state=5)])
+    assert store_updates._result_state(result) == ('other-error', [])
+
+
+@pytest.mark.parametrize('queue_state,error,expected', [(3, -2145107961, 'other-error'), (0, 0, 'pending'), (4, 0, 'pending'), (2, 0, 'canceled'), (1, 0, 'completed')])
+def test_store_queue_error_and_pending_override_success(queue_state, error, expected):
+    item = SimpleNamespace(package_family_name='Phrasync_test', get_current_status=lambda: SimpleNamespace(
+        package_install_state=queue_state, package_install_extended_state=9, extended_error=error))
+    result = SimpleNamespace(overall_state=3, store_package_update_statuses=[], store_queue_items=[item])
+    state, codes = store_updates._result_state(result)
+    assert state == expected
+    assert codes == (['0x80244007'] if error else [])
+
+
+def test_empty_completion_is_not_verified():
+    assert store_updates._result_state(SimpleNamespace(overall_state=3))[0] == 'unverified'
+
+
+def test_progress_uses_store_values_and_never_invents_progress():
+    store_updates._on_progress(None, SimpleNamespace(total_download_progress=.425, package_update_state=1,
+        package_bytes_downloaded=42, package_download_size_in_bytes=100))
+    assert store_updates.update_progress()['percent'] == 42
+    assert store_updates.update_progress()['downloaded_bytes'] == 42
+    store_updates._on_progress(None, SimpleNamespace(total_download_progress=float('nan'), package_update_state=0,
+        package_bytes_downloaded=0, package_download_size_in_bytes=0))
+    assert store_updates.update_progress()['percent'] is None
+
+
+def test_restart_verifies_real_package_identity_not_consent(monkeypatch):
+    monkeypatch.setattr(store_updates, 'package_identity', lambda: 'Phrasync_0.4.7.0_x64__publisher')
+    store_updates._write_receipt('started')
+    store_updates._write_receipt('completed')
+    assert store_updates.previous_update() == 'not-applied'
+    monkeypatch.setattr(store_updates, 'package_identity', lambda: 'Phrasync_0.4.8.0_x64__publisher')
+    assert store_updates.previous_update() == 'verified'
+    monkeypatch.setattr(store_updates, 'package_identity', lambda: None)
+    assert store_updates.previous_update() is None
+
+
+@pytest.mark.parametrize('second_state,expected', [(3, 'completed'), (5, 'other-error')])
+def test_transient_download_fault_refreshes_and_retries_only_once(monkeypatch, second_state, expected):
+    fake = FakeStore([object()])
+    calls = []
+    async def complete():
+        code = -2145107961 if len(calls) == 1 or second_state == 5 else 0
+        queue = SimpleNamespace(package_family_name='Phrasync_test', get_current_status=lambda: SimpleNamespace(
+            package_install_state=3 if code else 1, package_install_extended_state=9 if code else 6, extended_error=code))
+        return SimpleNamespace(overall_state=3, store_package_update_statuses=[], store_queue_items=[queue])
+    def start(updates):
+        calls.append(updates)
+        return fake, complete()
+    monkeypatch.setattr(store_updates, '_context', lambda: fake)
+    monkeypatch.setattr(store_updates, '_start_install_on_ui', start)
+    result = asyncio.run(store_updates.install_updates())
+    assert len(calls) == 2
+    assert result['state'] == expected
+    assert not store_updates.update_progress()['busy']
+
+
+def test_cancellation_never_retries(monkeypatch):
+    fake = FakeStore([object()])
+    calls = []
+    async def cancel():
+        return SimpleNamespace(overall_state=4, store_package_update_statuses=[])
+    def start(updates):
+        calls.append(updates)
+        return fake, cancel()
+    monkeypatch.setattr(store_updates, '_context', lambda: fake)
+    monkeypatch.setattr(store_updates, '_start_install_on_ui', start)
+    assert asyncio.run(store_updates.install_updates())['state'] == 'canceled'
+    assert len(calls) == 1
+
+
+def test_source_never_registers_python_for_restart(monkeypatch):
+    monkeypatch.setattr(store_updates.sys, 'frozen', False, raising=False)
+    monkeypatch.setattr(store_updates.ctypes, 'windll', None)
+    store_updates._register_restart()
+
+
+def test_packaged_restart_does_not_relaunch_old_executable_path(monkeypatch):
+    calls = []
+    class Register:
+        def __call__(self, command, flags):
+            calls.append((command, flags))
+            return 0
+    monkeypatch.setattr(store_updates.sys, 'platform', 'win32')
+    monkeypatch.setattr(store_updates.sys, 'frozen', True, raising=False)
+    monkeypatch.setattr(store_updates.ctypes, 'windll', SimpleNamespace(kernel32=SimpleNamespace(RegisterApplicationRestart=Register())))
+    store_updates._register_restart()
+    assert calls == [(None, 3)]

@@ -596,6 +596,7 @@
           <div class="integration-heading"><div><strong>App updates</strong><span id="storeUpdateVersion">Checking installation…</span></div><span class="integration-badge">Microsoft Store</span></div>
           <p>Check for new Phrasync versions and install them through Microsoft Store. Your projects remain on this computer.</p>
           <p id="storeUpdateMessage" role="status" aria-live="polite">Open settings to check the installation.</p>
+          <progress id="storeUpdateProgress" class="store-update-progress" max="100" hidden aria-label="Update progress"></progress>
           <div class="settings-actions"><button class="button secondary" id="storeUpdateOpen" type="button" hidden>Open Microsoft Store</button><button class="button secondary" id="storeUpdateCheck" type="button">Check for updates</button><button class="button primary" id="storeUpdateInstall" type="button" hidden>Install update</button></div>
         </section>
         <section class="integration-card">
@@ -612,6 +613,13 @@
     </form>
   </dialog>
 
+  <dialog id="storeUpdateAvailable" class="modal" aria-labelledby="storeUpdateAvailableTitle">
+    <div class="modal-card">
+      <header><div><span class="eyebrow">PHRASYNC · MICROSOFT STORE</span><h2 id="storeUpdateAvailableTitle">A Phrasync update is available.</h2></div></header>
+      <div class="settings-content"><p>Save your project before installing. You can keep working and update later from Settings.</p></div>
+      <form method="dialog"><footer><button class="button secondary" value="later" autofocus>Not now</button><button class="button primary" value="settings">Review update</button></footer></form>
+    </div>
+  </dialog>
   <dialog id="storeUpdateConfirm" class="modal" aria-labelledby="storeUpdateConfirmTitle" aria-describedby="storeUpdateConfirmText">
     <form method="dialog" class="modal-card">
       <header><div><span class="eyebrow">PHRASYNC · MICROSOFT STORE</span><h2 id="storeUpdateConfirmTitle">Update Phrasync</h2></div></header>

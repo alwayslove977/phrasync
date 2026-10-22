@@ -1,0 +1,15 @@
+Phrasync 0.4.9.0
+
+This maintenance update improves the reliability and clarity of in-app Microsoft Store updates.
+
+Phrasync now checks individual package results and the Store installation queue instead of trusting only the overall result. Failed or incomplete updates no longer report success and ask you to restart. Original error codes are preserved in Diagnostics.
+
+The app refreshes the update request and retries once for the observed Windows Update download fault 0x80244007. It never automatically retries a cancellation. Persistent failures offer a Microsoft Store fallback.
+
+Settings shows real Store update progress, with an indeterminate indicator when no percentage is available. A startup notification lets you review available updates without automatically installing them. Installation still requires your permission.
+
+The next launch verifies whether a newer package is actually running. The Windows app registers for Windows-managed restart during an update instead of reopening an old installation path.
+
+The welcome dialog's optional Buy me a coffee button has improved spacing. Existing projects, media, editing tools and export features are unchanged.
+
+246 automated Windows tests passed. Full confirmation of the new retry and restart flow requires a subsequent Store-distributed update. Microsoft Store or Windows Update service failures may still require retrying later through the Store. Save your project before updating. Phrasync remains free.

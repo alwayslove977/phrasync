@@ -46,7 +46,7 @@ from phrasync.media import ffmpeg_exe, probe_duration
 from phrasync.ocr import OCRUnavailable, capability_status as ocr_status, ocr_image
 from phrasync.qa import preflight_project
 from phrasync.storage import delete_asset, get_asset, get_av_asset, list_assets, store_stream, store_chunks, store_path
-from phrasync.store_updates import StoreUpdateUnavailable, check_updates, install_updates, package_identity, bind_window
+from phrasync.store_updates import StoreUpdateUnavailable, check_updates, install_updates, package_identity, bind_window, update_progress, previous_update
 from phrasync.server import (
     available_port,
     browser_host,
@@ -170,7 +170,13 @@ def instance() -> dict[str, str]:
 @app.get("/api/store-updates/status")
 def store_update_status(request: Request) -> dict[str, Any]:
     _require_local_request(request)
-    return {"version": APP_VERSION, "packaged": bool(package_identity())}
+    return {"version": APP_VERSION, "packaged": bool(package_identity()), "previous_update": previous_update()}
+
+
+@app.get("/api/store-updates/progress")
+def store_update_progress(request: Request) -> dict[str, Any]:
+    _require_local_request(request)
+    return update_progress()
 
 
 @app.post("/api/store-updates/check")
