@@ -24,6 +24,6 @@ The optional Buy me a coffee button has more space above and below it. Existing 
 
 The new 0.4.9 retry and restart flow still requires confirmation through a subsequent real Store upgrade. App code cannot guarantee recovery from every Microsoft Store or Windows Update service error.
 
-[GitHub v0.4.9](https://github.com/jaydemks/phrasync/releases/tag/v0.4.9) provides the source release. The [Microsoft Store](https://apps.microsoft.com/detail/9NF9JBG2PKHX) is the Windows installer channel. The matching 0.4.9.0 package becomes available after certification and rollout; the previous approved release remains available in the meantime. If your older in-app updater cannot install this release, update through Microsoft Store directly. No routine uninstall is required for this updater fix.
+[GitHub v0.4.9](https://github.com/jaydemks/phrasync/releases/tag/v0.4.9) provides the source release. The [Microsoft Store](https://apps.microsoft.com/detail/9NF9JBG2PKHX) is the Windows installer channel. The matching 0.4.9.0 package was submitted for certification on October 22, 2026, with automatic publication after approval. The previous approved release remains available until rollout completes. If your older in-app updater cannot install this release, update through Microsoft Store directly. No routine uninstall is required for this updater fix.
 
 Phrasync remains free and open source, with local media processing. Full history is in [RELEASE_NOTES.md](https://github.com/jaydemks/phrasync/blob/main/RELEASE_NOTES.md).

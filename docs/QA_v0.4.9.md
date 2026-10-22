@@ -1,6 +1,17 @@
 # Phrasync 0.4.9 verification
 
-Release preparation authorized on 22 October 2026. Publication and Store submission status must be verified separately.
+GitHub source release v0.4.9 is public. Store package 0.4.9.0 was submitted on
+22 October 2026 as Submission 13, ID 1152921505702206658. Partner Center confirmed
+"In certification", with pre-processing in progress and automatic publication
+after approval. This is submission confirmation, not an approval claim.
+
+The uploaded MSIX is 1,527,152,914 bytes. SHA256:
+`E60A26C9BC4A9BE79C9B6BFF97153F7CF197CBE5D6E7E8509A03BC662C4E73D4`.
+Partner Center validated 0.4.9.0 X64 before submission and replaced 0.4.8.0 in
+the draft because the new package supports the same customers. Public patch
+notes, the description and certification testing instructions were updated.
+Publishing remains automatic after approval; pricing and existing media were
+not changed.
 
 ## Real Store reproduction, 22 October 2026
 

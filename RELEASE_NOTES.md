@@ -1,6 +1,6 @@
 # Phrasync v0.4.9
 
-This maintenance release improves in-app Microsoft Store updates. The matching Windows installer is distributed through Microsoft Store after certification and rollout.
+This maintenance release improves in-app Microsoft Store updates. GitHub v0.4.9 is published. The matching 0.4.9.0 Microsoft Store package was submitted for certification on October 22, 2026, with automatic publication after approval. The previous approved Store version remains available until rollout completes.
 
 Individual package results and Store queue states are checked before reporting completion. A failed package no longer produces a misleading success or restart message. Original HRESULT error codes remain visible in Diagnostics.
 
