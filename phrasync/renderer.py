@@ -26,6 +26,14 @@ from .footage import prepare_footage, effects_enabled
 ProgressCallback = Callable[[float, str], None]
 
 
+def webgl_color_args(encoded_format):
+    # Canvas VideoFrames are sRGB / BT.709. Some Windows hardware encoders
+    # omit the H.264 VUI, making players incorrectly assume a BT.601 matrix.
+    # Set tags without another encode; the legacy CPU path uses its own matrix.
+    return ['-bsf:v', 'h264_metadata=colour_primaries=1:transfer_characteristics=13:'
+            'matrix_coefficients=1:video_full_range_flag=0'] if encoded_format == 'h264-gpu' else []
+
+
 @dataclass(slots=True)
 class RenderContext:
     project: dict[str, Any]
@@ -244,7 +252,9 @@ def _build_context(project: dict[str, Any], progress: ProgressCallback | None = 
         if not math.isfinite(start_time) or not math.isfinite(end_time) or not 0 <= start_time < end_time <= duration:
             raise ValueError("Export range must satisfy 0 <= IN < OUT <= timeline duration")
         duration = end_time - start_time
-    frame_count = max(1, int(math.ceil(duration * fps)))
+    # Decimal IN/OUT subtraction can turn 18 frames into 18.000000000000004.
+    # Do not encode a phantom frame that the exact-duration mux then removes.
+    frame_count = max(1, int(math.ceil(duration * fps - 1e-9)))
     if progress:
         progress(0.015, "Analyzing audio")
     envelope = audio_envelope(
@@ -313,7 +323,7 @@ def render_project(
             # Flat lyrics are composited before the first encode, not decoded
             # and encoded again. Both typography paths only need audio muxing.
             command = [ffmpeg_exe(), "-y", "-v", "error"]
-            if encoded_format != "matroska":
+            if encoded_format in {"h264", "h264-gpu"}:
                 command.extend(["-r", str(ctx.fps), "-f", "h264"])
             command.extend(["-i", str(encoded)])
             if ctx.audio:
@@ -321,7 +331,7 @@ def render_project(
             command.extend(["-map", "0:v:0"])
             if ctx.audio:
                 command.extend(["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"])
-            command.extend(["-c:v", "copy", "-t", f"{ctx.duration:.6f}",
+            command.extend([*webgl_color_args(encoded_format), "-c:v", "copy", "-t", f"{ctx.duration:.6f}",
                             "-movflags", "+faststart", str(temporary)])
             if progress:
                 progress(0.90, "Muxing WebGL video and audio")

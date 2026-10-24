@@ -1,3 +1,25 @@
+# Phrasync v0.5.0
+
+This maintenance release focuses on reliable video export, faster supported GPU rendering and closer preview/export synchronization. GitHub provides the source release. The matching Microsoft Store package is 0.5.0.0; Store availability follows certification and rollout, with the previous approved version remaining available in the meantime.
+
+Fix the local frame transport becoming blocked by an idle browser connection. Restore verified image/video references from older projects before rendering and report missing media early. Preserve the original browser error, stack and failing timeline time in Diagnostics instead of a generic missing-frame message.
+
+Encode supported 3D compositions directly from the GPU canvas, including layered footage, effects and offline spectrum data. Decode compatible H.264 footage sequentially from its original compressed packets. Bounded queues avoid retaining the full video in memory. Complete CPU/raw/PNG compatibility paths remain available; no layers are removed to obtain the speed improvement.
+
+Correct persistent footage-preview drift and prepare trimmed clips before transitions, including clips that reuse the same source file. Add explicit GPU-video colour metadata to prevent player-dependent colour shifts.
+
+Align offline spectrum analysis with the preview's FFT, sample rate, bins, dB mapping and smoothing history, including nonzero IN/OUT selections. Preserve exact frame timestamps and avoid phantom extra frames for decimal ranges. Accept valid, decodable single-frame exports.
+
+Work around the faster-whisper/PyAV audio-decoding compatibility issue without masking unrelated errors or changing the transcription model.
+
+On an RTX 3090, a real 16-second 1080p30 project with footage, a crossfade, effects and 3D lyrics exported in 15.765 seconds, compared with the initial diagnostic run's 101.093 seconds. Encoder/decoder GPU activity and preview/output frames were checked. This is a project-specific result, not a universal real-time rendering guarantee.
+
+293 automated Windows tests passed. Structural export matrices covered 70 source cases and 67 Windows-package cases, including multiple frame rates, 4K smoke cases, CJK, layered visuals, IN/OUT and recovery paths. The original issue's project/media were not supplied, so the reporter should still retry that project. Native macOS/Linux builds and every possible GPU/driver combination have not been verified.
+
+Thank you to Especiel-EA for the report, logs and experimental patches in [issue #5](https://github.com/jaydemks/phrasync/issues/5). Full notes: [docs/RELEASE_v0.5.0.md](docs/RELEASE_v0.5.0.md).
+
+---
+
 # Phrasync v0.4.9
 
 This maintenance release improves in-app Microsoft Store updates. GitHub v0.4.9 is published. The matching 0.4.9.0 Microsoft Store package was submitted for certification on October 22, 2026, with automatic publication after approval. The previous approved Store version remains available until rollout completes.

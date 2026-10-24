@@ -1,0 +1,17 @@
+Phrasync 0.5.0
+
+Improved export reliability for projects with images, videos, layered footage, effects and 3D text. Older background references are restored before rendering, and missing media is reported clearly.
+
+Improved frame transfer, with a lossless compatibility path when browser pixel readback fails. Export errors now include more useful diagnostic details.
+
+Faster GPU canvas encoding for supported 3D compositions, with sequential decoding of compatible H.264 footage. Complete fallback paths preserve footage, effects, text and bitrate settings when hardware encoding is unavailable.
+
+Improved footage preview synchronization and clip preparation before transitions, avoiding persistent playback delay.
+
+Correct colour metadata for GPU-encoded video prevents colour shifts in players that would otherwise assume a different matrix.
+
+Audio spectrum analysis is aligned with the preview settings, including improved behaviour when exporting an IN/OUT range. Frame timestamps and decimal export ranges are more accurate across supported frame rates.
+
+Valid short selections, including a single frame, are no longer incorrectly rejected after rendering.
+
+Fixed an audio-decoding dependency incompatibility affecting some source installations.

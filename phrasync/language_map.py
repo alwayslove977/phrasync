@@ -83,7 +83,17 @@ def known_language_codes() -> set[str]:
 def load_audio(path: Path) -> np.ndarray:
     from faster_whisper.audio import decode_audio
 
-    return decode_audio(str(path), sampling_rate=SAMPLE_RATE)
+    try:
+        return decode_audio(str(path), sampling_rate=SAMPLE_RATE)
+    except TypeError as error:
+        # Existing source environments may already have PyAV 19 installed.
+        # Do not hide unrelated decoder errors or monkey-patch a dependency.
+        if "metadata_errors" not in str(error) or "unexpected keyword" not in str(error):
+            raise
+        from .diagnostics import log_event
+        from .media import decode_audio_mono
+        log_event("warning", "transcription", "PyAV metadata_errors incompatibility; decoding audio with FFmpeg")
+        return decode_audio_mono(path, sample_rate=SAMPLE_RATE)
 
 
 def _short_time_rms(audio: np.ndarray) -> np.ndarray:

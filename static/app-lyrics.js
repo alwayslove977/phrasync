@@ -284,11 +284,13 @@ function seekTo(value) {
 async function ensureAudioAnalyser() {
   if (!project.audio?.url || analyser) return;
   try {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
     audioSource = audioContext.createMediaElementSource(els.audioPlayer);
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = .78;
+    analyser.minDecibels = -100;
+    analyser.maxDecibels = -30;
     frequencyData = new Uint8Array(analyser.frequencyBinCount);
     audioSource.connect(analyser);
     analyser.connect(audioContext.destination);

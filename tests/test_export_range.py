@@ -41,6 +41,40 @@ def test_real_short_range_export(tmp_path):
     assert decode_test(output)[0]
 
 
+@pytest.mark.parametrize('fps', [12, 23, 24, 25, 30, 50, 60])
+def test_decimal_range_does_not_add_a_phantom_frame(fps):
+    import math
+    p = project()
+    p['canvas']['fps'] = fps
+    p['exportRange'] = {'in': .2, 'out': .8}
+    assert _build_context(p).frame_count == math.ceil(.6 * fps - 1e-9)
+
+
+@pytest.mark.parametrize('fps', [12, 30, 60])
+def test_real_single_frame_range_passes_postflight(tmp_path, fps):
+    from phrasync.qa import postflight_render
+    p = project()
+    p['canvas']['fps'] = fps
+    p['exportRange'] = {'in': .4, 'out': .4 + 1/fps}
+    output = tmp_path / f'one-frame-{fps}.mp4'
+    result = render_project(p, output)
+    assert result['frames'] == 1
+    report = postflight_render(output, 1/fps)
+    assert report.ok, report.public()
+
+
+@pytest.mark.parametrize('duration', [None, 0, -1, float('nan')])
+def test_postflight_rejects_a_missing_or_invalid_duration(tmp_path, monkeypatch, duration):
+    import phrasync.qa as critic
+    output = tmp_path / 'invalid.mp4'
+    output.write_bytes(b'x' * 2048)
+    monkeypatch.setattr(critic, 'decode_test', lambda _: (True, ''))
+    monkeypatch.setattr(critic, 'probe_duration', lambda _: duration)
+    report = critic.postflight_render(output, 1)
+    assert not report.ok
+    assert any(issue.code == 'duration_zero' for issue in report.issues)
+
+
 def test_audio_is_cut_from_in_not_from_song_start(tmp_path):
     import numpy as np
     source=tmp_path/"tone.wav"

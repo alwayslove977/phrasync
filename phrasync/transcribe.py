@@ -363,7 +363,14 @@ def _decode_pass(
     recover_loops: bool = True,
 ) -> dict[str, Any]:
     """Run one Whisper decode and return its segments in track time."""
-    segments, info = model.transcribe(source, **options)
+    try:
+        segments, info = model.transcribe(source, **options)
+    except TypeError as error:
+        if not isinstance(source, (str, Path)) or "metadata_errors" not in str(error) or "unexpected keyword" not in str(error):
+            raise
+        source = load_audio(Path(source))
+        _guard(cancel_check)
+        segments, info = model.transcribe(source, **options)
     collected: list[dict[str, Any]] = []
     diagnostics: list[dict[str, Any]] = []
     repaired_words = 0

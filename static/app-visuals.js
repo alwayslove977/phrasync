@@ -214,8 +214,8 @@ function drawDynamicVisual(now) {
     const left = (width - available) / 2;
     const base = height * .91;
     for (let i = 0; i < bars; i++) {
-      const exported=window.__vfExportSpectrum;
-      const freq = exported?.length ? exported[Math.min(exported.length-1,Math.floor(i*exported.length/bars))] : frequencyData ? frequencyData[Math.min(frequencyData.length - 1, 3 + i * 2)] / 255 : .15 + .12 * Math.abs(Math.sin(i * .67 + t * 3));
+      const exported=window.__vfExportFrequencyData;
+      const freq = exported?.length ? exported[Math.min(exported.length-1,3+i*2)] : frequencyData ? frequencyData[Math.min(frequencyData.length - 1, 3 + i * 2)] / 255 : .15 + .12 * Math.abs(Math.sin(i * .67 + t * 3));
       const value = Math.max(.05, freq * (.62 + intensity * .95) * (1 + pulse * .22));
       const barHeight = height * .34 * value;
       const gradient = ctx.createLinearGradient(0, base - barHeight, 0, base);

@@ -62,7 +62,7 @@ def test_4k_canvas_can_encode_without_browser_h264(tmp_path):
     devtools = Mock()
     def send_frame(expression):
         import json
-        endpoint = re.search(r'fetch\("([^\"]+)"', expression).group(1)
+        endpoint = re.search(r'VFFrameTransport.send\(VFExport.canvas\(\),"([^\"]+)"', expression).group(1)
         frames = json.loads(re.search(r'const frames=(.*?);for', expression).group(1))
         for _ in frames:
             request = urllib.request.Request(endpoint, data=image.tobytes(), headers={'Origin': 'http://127.0.0.1:5526'})
@@ -85,6 +85,36 @@ def test_cancelled_compatibility_render_removes_partial_stream(tmp_path):
         _encode_canvas_ffmpeg(Mock(), {"__renderOrigin": "http://127.0.0.1:5526"}, output, width=320, height=320, fps=30,
                               frame_count=2, envelope=[], cancel_check=lambda: True)
     assert not output.exists()
+
+
+@pytest.mark.parametrize('fps', [12, 23, 24, 25, 30, 50, 60])
+def test_canvas_intermediate_preserves_exact_frame_timestamps(tmp_path, fps):
+    av = pytest.importorskip('av')
+    import json
+    import math
+    import re
+    import urllib.request
+    output = tmp_path / f'exact-{fps}.h264'
+    pixels = Image.new('RGBA', (320, 320), '#406080').tobytes()
+    origin = 'http://127.0.0.1:5526'
+    def send_frames(expression):
+        endpoint = re.search(r'VFFrameTransport.send\(VFExport.canvas\(\),"([^\"]+)"', expression).group(1)
+        frames = json.loads(re.search(r'const frames=(.*?);for', expression).group(1))
+        for _ in frames:
+            with urllib.request.urlopen(urllib.request.Request(endpoint, data=pixels, headers={'Origin': origin}), timeout=10) as response:
+                assert response.status == 204
+        return {'mode': 'raw'}
+    devtools = Mock()
+    devtools.evaluate.side_effect = send_frames
+    count = math.ceil(.6 * fps)
+    _encode_canvas_ffmpeg(devtools, {'__renderOrigin': origin, 'export': {'preset': 'ultrafast'}},
+                         output, width=320, height=320, fps=fps, frame_count=count, envelope=[])
+    with av.open(str(output)) as container:
+        assert float(container.streams.video[0].average_rate) == fps
+        frames = list(container.decode(video=0))
+        assert len(frames) == count
+        for index, frame in enumerate(frames):
+            assert float(frame.pts * frame.time_base) == pytest.approx(index / fps, abs=1e-8)
 
 
 def test_project_named_outputs_do_not_overwrite_previous_exports(tmp_path, monkeypatch):

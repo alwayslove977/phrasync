@@ -20,6 +20,8 @@ from .footage import effects_enabled
 from .audio_spectrum import SpectrumSource
 from .storage import get_av_asset
 from .frame_bridge import frame_bridge
+from .hardware_encoding import can_use_nvenc, nvenc_args
+from .footage_frames import footage_frame_bridge
 
 
 ProgressCallback = Callable[[float, str], None]
@@ -87,11 +89,17 @@ class _DevTools:
             return reply.get("result", {})
 
     def evaluate(self, expression: str, *, await_promise: bool = True) -> Any:
-        result = self.call("Runtime.evaluate", {
+        reply = self.call("Runtime.evaluate", {
             "expression": expression,
             "awaitPromise": await_promise,
             "returnByValue": True,
-        }).get("result", {})
+        })
+        details = reply.get("exceptionDetails")
+        if details:
+            exception = details.get("exception") or {}
+            raise RuntimeError("Export browser: " + str(exception.get("description")
+                               or exception.get("value") or details.get("text") or "JavaScript evaluation failed"))
+        result = reply.get("result", {})
         if result.get("subtype") == "error":
             raise RuntimeError(result.get("description") or "WebGL browser evaluation failed")
         return result.get("value")
@@ -100,24 +108,114 @@ class _DevTools:
         self.socket.close()
 
 
+def _needs_spectrum(project):
+    bg = project.get("background") or {}
+    settings = [(clip.get("asset") or {}).get("settings") or {} for clip in bg.get("clips") or []]
+    return bool((bg.get("effects") or {}).get("spectrum", 0) > 0 or bg.get("sceneWave")
+                or bg.get("visual") == "equalizer" or any(
+                    spec.get("visual") == "equalizer" or spec.get("sceneWave") for spec in settings))
+
+
+def _fallback_reason(project, frame_transform):
+    if frame_transform is not None:
+        return "single-pass flat text composition"
+    if bitrate_bps(project) is not None:
+        return "custom bitrate requested"
+    if effects_enabled(project):
+        return "shared footage and effects composition"
+    if project.get("audioAssetId") and _needs_spectrum(project):
+        return "offline audio spectrum"
+    return None
+
+
+def _encode_gpu_canvas(devtools, project, path, *, width, height, fps, frame_count,
+                       envelope, progress=None, cancel_check=None):
+    """Return false only when the hardware browser codec is unsupported."""
+    audio = get_av_asset(project.get('audioAssetId')) if project.get('audioAssetId') else None
+    start = float((project.get('exportRange') or {}).get('in', 0))
+    spectrum = SpectrumSource(audio.path, fps, start_time=start) if audio and _needs_spectrum(project) else None
+    rate = bitrate_bps(project)
+    target = rate or int(max(2_000_000, width * height * fps * .14))
+    started = time.monotonic()
+    try:
+        with path.open('wb') as output:
+            def consume(data, index):
+                if cancel_check and cancel_check():
+                    raise RuntimeError('Render cancelled')
+                output.write(data)
+                # H.264 filler NAL units retain the user's requested CBR even
+                # when a hardware encoder emits fewer bytes for a simple frame.
+                missing = round((index + 1) * rate / (8 * fps)) - output.tell() if rate else 0
+                if missing >= 6:
+                    output.write(b'\x00\x00\x00\x01\x0c' + b'\xff' * (missing - 6) + b'\x80')
+            with frame_bridge(_local_origin(project.get('__renderOrigin')), width, height,
+                              consume, encoded=True) as (endpoint, state):
+                supported = devtools.evaluate(f'VFGPUEncoder.prepare({width},{height},{fps},{target},{json.dumps(endpoint)})')
+                if not supported:
+                    return False
+                log_event('info', 'render', f'GPU canvas H.264 encoder (hardware preferred): {width}x{height}, {fps} fps')
+                try:
+                    for first in range(0, frame_count, 16):
+                        if cancel_check and cancel_check():
+                            raise RuntimeError('Render cancelled')
+                        end = min(frame_count, first + 16)
+                        frames = [[start + index/fps, float(envelope[index]) if index < len(envelope) else 0,
+                                   spectrum.read(index) if spectrum else []] for index in range(first, end)]
+                        devtools.evaluate(f'VFGPUEncoder.batch({json.dumps(frames)},{fps},{first},{fps*2})')
+                        if state['error'] or state['frames'] != end:
+                            raise RuntimeError(state['error'] or f'GPU encoder returned {state["frames"]}/{end} frames')
+                        if progress:
+                            progress(.06+.82*end/frame_count, f'Rendering frame {end}/{frame_count} (GPU canvas encoder)')
+                    devtools.evaluate('VFGPUEncoder.finish()')
+                finally:
+                    devtools.evaluate('VFGPUEncoder.abort()')
+        log_event('info', 'render', f'GPU canvas encoding: {frame_count} frames in {time.monotonic()-started:.2f}s')
+        return True
+    finally:
+        if spectrum:
+            spectrum.close()
+
+
 def _encode_canvas_ffmpeg(devtools, project, path, *, width, height, fps, frame_count,
                           envelope, progress=None, cancel_check=None, frame_transform=None):
+    hardware = can_use_nvenc(width, height, fps)
+    try:
+        return _encode_canvas_stream(devtools, project, path, width=width, height=height, fps=fps,
+            frame_count=frame_count, envelope=envelope, progress=progress, cancel_check=cancel_check,
+            frame_transform=frame_transform, hardware=hardware)
+    except HardwareEncoderError as error:
+        log_event('warning', 'render', f'NVENC became unavailable; restarting the complete video pass with CPU: {error}')
+        clean = dict(project); clean.pop('__renderOrigin', None)
+        devtools.evaluate(f'VFExport.prepare({width},{height},{json.dumps(clean)})')
+        return _encode_canvas_stream(devtools, project, path, width=width, height=height, fps=fps,
+            frame_count=frame_count, envelope=envelope, progress=progress, cancel_check=cancel_check,
+            frame_transform=frame_transform, hardware=False)
+
+
+class HardwareEncoderError(RuntimeError):
+    pass
+
+
+def _encode_canvas_stream(devtools, project, path, *, width, height, fps, frame_count,
+                          envelope, progress=None, cancel_check=None, frame_transform=None, hardware=False):
     """Lossless frame transport, bounded memory, no browser codec dependency."""
     started = time.monotonic()
     log_event("info", "render", f"FFmpeg canvas encoder: {width}x{height}, {fps} fps, bitrate={bitrate_bps(project) or 'CRF'}")
     audio = get_av_asset(project.get("audioAssetId")) if project.get("audioAssetId") else None
-    bg = project.get("background") or {}
-    visual_settings = [(clip.get("asset") or {}).get("settings") or {} for clip in bg.get("clips") or []]
-    needs_spectrum = (bg.get("effects") or {}).get("spectrum", 0) > 0 or bg.get("sceneWave") or bg.get("visual") == "equalizer" or any(
-        spec.get("visual") == "equalizer" or spec.get("sceneWave") for spec in visual_settings)
     start_time = float((project.get("exportRange") or {}).get("in", 0))
-    spectrum = SpectrumSource(audio.path, fps, start_time=start_time) if audio and needs_spectrum else None
+    spectrum = SpectrumSource(audio.path, fps, start_time=start_time) if audio and _needs_spectrum(project) else None
+    png_reported = False
+    codec_args = nvenc_args(project) if hardware else ['-c:v', 'libx264',
+        '-preset', str(project.get('export', {}).get('preset', 'medium')), *rate_control_args(project)]
+    log_event('info', 'render', 'Canvas video encoder: ' + ('NVIDIA NVENC' if hardware else 'CPU libx264'))
     with tempfile.TemporaryFile() as errors:
         encoder = subprocess.Popen([
             ffmpeg_exe(), "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgba",
-            "-s:v", f"{width}x{height}", "-framerate", str(fps), "-i", "pipe:0", "-an", "-c:v", "libx264",
-            "-preset", str(project.get("export", {}).get("preset", "medium")),
-            *rate_control_args(project), "-pix_fmt", "yuv420p", "-f", "matroska", str(path),
+            "-s:v", f"{width}x{height}", "-framerate", str(fps), "-i", "pipe:0", "-an",
+            *codec_args, "-pix_fmt", "yuv420p",
+            # Matroska's millisecond time base rounds 12/23/24 fps timestamps.
+            # Keep exact frame ticks in the intermediate and stream-copy them.
+            "-video_track_timescale", str(fps * 1024), "-f", "mp4", str(path),
         ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errors, creationflags=background_flags())
         try:
             def consume(data, index):
@@ -140,23 +238,26 @@ def _encode_canvas_ffmpeg(devtools, project, path, *, width, height, fps, frame_
                               for index in range(batch_start, batch_end)]
                     script = (
                         f"(async()=>{{const frames={json.dumps(frames)};for(const [time,amplitude,bands] of frames){{"
-                        "window.__vfExportSpectrum=bands;await VFExport.renderFrame(time,amplitude);"
-                        "const source=VFExport.canvas();"
-                        "window.__vfRawCanvas ||= document.createElement('canvas');"
-                        f"const c=window.__vfRawCanvas;if(c.width!=={width}||c.height!=={height}){{c.width={width};c.height={height};}}"
-                        "const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(source,0,0,c.width,c.height);"
-                        "const pixels=ctx.getImageData(0,0,c.width,c.height).data;"
-                        f"const response=await fetch({json.dumps(endpoint)},{{method:'POST',body:pixels}});"
-                        "if(!response.ok)throw new Error('Canvas frame transport failed: '+response.status);}})()"
+                        "try{window.__vfExportFrequencyData=bands;window.__vfExportSpectrum=bands.slice(0,64);"
+                        "await VFExport.renderFrame(time,amplitude);"
+                        f"window.__vfTransport=await VFFrameTransport.send(VFExport.canvas(),{json.dumps(endpoint)});"
+                        "}catch(error){throw new Error('Export frame at '+time.toFixed(3)+'s: '+(error?.stack||String(error)));}"
+                        "}return window.__vfTransport;})()"
                     )
                     try:
-                        devtools.evaluate(script)
+                        transport = devtools.evaluate(script)
                     except RuntimeError:
                         if state['error']:
                             raise RuntimeError(state['error']) from None
                         raise
+                    if isinstance(transport, dict) and transport.get('mode') == 'png' and not png_reported:
+                        log_event('warning', 'render', 'Using lossless PNG compatibility transport after pixel readback failure: '
+                                  + str(transport.get('fallbackReason') or 'unknown browser readback error'))
+                        png_reported = True
                     if state['error'] or state['frames'] != batch_end:
-                        raise RuntimeError(state['error'] or 'Canvas frame was not received')
+                        raise RuntimeError(state['error'] or
+                            f"Canvas frame was not received (received {state['frames']}/{batch_end}; "
+                            f"timeline {start_time + batch_start / fps:.3f}s). See the export browser error in Diagnostics.")
                     if progress:
                         progress(.06 + .82 * batch_end / frame_count,
                                  f"Rendering frame {batch_end}/{frame_count} (single-pass encoder)")
@@ -167,11 +268,15 @@ def _encode_canvas_ffmpeg(devtools, project, path, *, width, height, fps, frame_
             elapsed = time.monotonic() - started
             log_event("info", "render", f"Single-pass canvas encoding: {frame_count} frames in {elapsed:.2f}s "
                       f"({frame_count / max(elapsed, .001):.1f} fps); flat lyrics={frame_transform is not None}")
-        except Exception:
+        except Exception as error:
+            failed_encoder = encoder.poll() not in (None, 0)
             if encoder.poll() is None:
                 encoder.kill()
             encoder.wait(timeout=5)
             path.unlink(missing_ok=True)
+            if hardware and failed_encoder and not (cancel_check and cancel_check()):
+                errors.seek(0)
+                raise HardwareEncoderError(errors.read().decode('utf-8', errors='replace') or str(error)) from error
             raise
         finally:
             if spectrum:
@@ -203,10 +308,12 @@ def render_webgl_video(
     clean_project.pop("__renderOrigin", None)
     clean_project["audio"] = None
     custom_bitrate = bitrate_bps(project)
+    fallback_reason = _fallback_reason(project, frame_transform)
     bitrate = custom_bitrate or int(max(2_000_000, width * height * fps * 0.14))
     key_interval = max(1, fps * 2)
 
-    with tempfile.TemporaryDirectory(prefix="phrasync-webgl-", ignore_cleanup_errors=True) as folder:
+    with tempfile.TemporaryDirectory(prefix="phrasync-webgl-", ignore_cleanup_errors=True) as folder, \
+            footage_frame_bridge(origin, project) as footage_endpoint:
         temp_dir = Path(folder)
         profile = temp_dir / "profile"
         download = temp_dir / "download"
@@ -263,6 +370,23 @@ def render_webgl_video(
               return debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : 'browser-selected renderer';
             })()""")
             log_event("info", "render", f"Export graphics: {graphics}")
+            devtools.evaluate('window.__vfFootageFramesEndpoint=' + json.dumps(footage_endpoint))
+
+            # The complete 3D composition, footage and offline spectrum can be
+            # encoded directly on the GPU. Flat PIL typography still uses the
+            # lossless canvas bridge; no text layer may be omitted for speed.
+            if frame_transform is None:
+                devtools.evaluate(f'VFExport.prepare({width},{height},{json.dumps(clean_project)})')
+                try:
+                    if _encode_gpu_canvas(devtools, project, encoded_path, width=width, height=height,
+                            fps=fps, frame_count=frame_count, envelope=envelope,
+                            progress=progress, cancel_check=cancel_check):
+                        return 'h264-gpu'
+                except Exception as error:
+                    if cancel_check and cancel_check():
+                        raise RuntimeError('Render cancelled') from error
+                    log_event('warning', 'render', f'GPU canvas encoder unavailable; restarting lossless compatibility pass: {error}')
+                encoded_path.unlink(missing_ok=True)
 
             setup = {
                 "project": clean_project,
@@ -272,7 +396,7 @@ def render_webgl_video(
                 "startTime": float((project.get("exportRange") or {}).get("in", 0)),
                 "frames": frame_count,
                 "bitrate": bitrate,
-                "ffmpeg": frame_transform is not None or custom_bitrate is not None or effects_enabled(project),
+                "ffmpeg": fallback_reason is not None,
                 "keyInterval": key_interval,
                 "envelope": envelope,
             }
@@ -356,14 +480,15 @@ def render_webgl_video(
                     progress(0.06 + value * 0.82, f"Rendering WebGL frame {max(1, int(value * frame_count))}/{frame_count}")
                 if state.get("done"):
                     if state.get("fallback") or state.get("error"):
-                        reason = state.get("error") or ("custom bitrate requested" if custom_bitrate else "browser H.264 unavailable")
-                        log_event("info" if custom_bitrate else "warning", "render", f"Using FFmpeg canvas export: {reason}")
+                        reason = state.get("error") or fallback_reason or "browser H.264 unavailable"
+                        log_event("info" if fallback_reason and not state.get("error") else "warning",
+                                  "render", f"Using FFmpeg canvas export: {reason}")
                         # Prepare again after a browser codec error; keep the scene and dimensions intact.
                         devtools.evaluate("VFExport.prepare(" + str(width) + "," + str(height) + "," + json.dumps(clean_project) + ")")
                         _encode_canvas_ffmpeg(devtools, project, encoded_path, width=width, height=height,
                                               fps=fps, frame_count=frame_count, envelope=envelope,
                                               progress=progress, cancel_check=cancel_check, frame_transform=frame_transform)
-                        return "matroska"
+                        return "mp4"
                     break
                 time.sleep(0.25)
 

@@ -26,6 +26,16 @@ def prepare_footage(project: dict) -> dict:
         if not math.isfinite(value) or value < 0 or value > maximum:
             raise ValueError(f"Invalid footage effect: {key}")
     if not bg.get("footageEnabled"):
+        kind = bg.get("type")
+        if kind in {"image", "video"}:
+            # Older/source projects can contain only assetId. Rehydrate trusted
+            # metadata for the browser instead of relying on stale saved URLs.
+            asset_id = bg.get("assetId") or (bg.get(kind + "Asset") or {}).get("id")
+            asset = get_asset(asset_id, kind) if asset_id else None
+            if asset is None:
+                raise ValueError(f"Background {kind} is missing. Import it again before exporting.")
+            bg.update(assetId=asset.id, url=asset.url, name=asset.name)
+            bg[kind + "Asset"] = asset.public()
         return project
     clips = bg.get("clips") or []
     if not isinstance(clips, list) or not clips:

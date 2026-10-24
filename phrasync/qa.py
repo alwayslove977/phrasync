@@ -296,7 +296,7 @@ def preflight_project(project: dict[str, Any]) -> CriticReport:
             duration = end - start
     report.metrics["duration"] = round(duration, 3)
 
-    frame_count = int(math.ceil(duration * fps))
+    frame_count = int(math.ceil(duration * fps - 1e-9))
     report.metrics["estimatedFrames"] = frame_count
     if frame_count > 20_000:
         report.add("warning", "long_render", f"Render contains about {frame_count:,} frames and may take time.")
@@ -328,7 +328,7 @@ def postflight_render(output_path: Path, expected_duration: float | None = None)
             "duration_mismatch",
             f"Output duration {duration:.2f}s differs from expected {expected_duration:.2f}s.",
         )
-    if duration and duration <= 0.1:
-        report.add("error", "duration_zero", "Output duration is effectively zero.")
+    if duration is None or not math.isfinite(duration) or duration <= 0:
+        report.add("error", "duration_zero", "Output duration is missing or zero.")
     report.checks.append("File size and duration sanity")
     return report

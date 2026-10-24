@@ -60,9 +60,9 @@ def test_spectrum_tracks_frequency_and_has_bounded_memory(tmp_path):
     try:
         for frame in range(15):
             bands = spectrum.read(frame)
-        expected = np.searchsorted(np.geomspace(40, 3900, 33), 440) - 1
+        expected = round(440 / (48000 / 256))
         assert abs(int(np.argmax(bands)) - expected) <= 1
-        assert max(bands) > .5 and len(bands) == 32
-        assert spectrum.window.size == 2048
+        assert max(bands) > .5 and len(bands) == 128
+        assert spectrum.window.size == 256
     finally:
         spectrum.close()

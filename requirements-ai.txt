@@ -1,5 +1,7 @@
 # Optional local AI pack. The standard installers include it by default.
 faster-whisper>=1.2.1,<2
+# faster-whisper 1.2.1 passes metadata_errors, removed by PyAV 19.
+av>=11,<19
 huggingface-hub==1.28.0
 rapidocr-onnxruntime>=1.3,<2
 onnxruntime>=1.18,<2

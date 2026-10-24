@@ -67,6 +67,22 @@ window.VFMedia = (() => {
       try { video.currentTime = time; } catch (error) { clean(); reject(error); }
     });
   }
+  function syncVideo(source, target, rate, playing) {
+    if (!playing) {
+      if (!source.paused) source.pause();
+      source.playbackRate = rate;
+      if (!source.seeking && Math.abs(source.currentTime-target) > .008) source.currentTime = target;
+      return;
+    }
+    const error = target-source.currentTime;
+    // Seek for discontinuities, not ordinary clock drift: frequent seeks on
+    // long-GOP video repeatedly discard the decoder's work. A proportional
+    // clock correction actively converges instead of accepting a fixed lag.
+    if (!source.seeking && (Math.abs(error) > .25 || (source.paused && Math.abs(error) > .015))) source.currentTime = target;
+    const correction = source.seeking || Math.abs(error) < .004 ? 0 : Math.max(-.25, Math.min(.25, error*4));
+    source.playbackRate = Math.max(.0625, Math.min(16, rate*(1+correction)));
+    if (source.paused) source.play().catch(() => {});
+  }
   function beat(t, amplitude) {
     const fx = project.background.effects || {}, bpm = positive(fx.bpm) || positive(project.timing?.bpm);
     const hits = project.background.effectOnsets || [];
@@ -84,9 +100,9 @@ window.VFMedia = (() => {
   function drawBase(ctx, source, clip, t, amplitude, clear = true) {
     const w = ctx.canvas.width, h = ctx.canvas.height, fx = project.background.effects || {};
     ctx.save(); if (clear) { ctx.fillStyle = project.background.backgroundColor || "#080812"; ctx.fillRect(0, 0, w, h); }
-    if (!source || !(source.videoWidth || source.naturalWidth || source.width)) { ctx.restore(); return; }
-    const sw = source.videoWidth || source.naturalWidth || source.width;
-    const sh = source.videoHeight || source.naturalHeight || source.height;
+    if (!source || !(source.videoWidth || source.naturalWidth || source.displayWidth || source.width)) { ctx.restore(); return; }
+    const sw = source.videoWidth || source.naturalWidth || source.displayWidth || source.width;
+    const sh = source.videoHeight || source.naturalHeight || source.displayHeight || source.height;
     const p = clip ? Math.max(0, Math.min(1, (t - clip.start) / Math.max(.01, clip.end - clip.start))) : 0;
     const lerp = (a, b) => positive(a) * (1 - p) + positive(b) * p;
     const angle = positive(fx.pendulum) * Math.sin(t * Math.PI * .8) * Math.PI / 180;
@@ -146,13 +162,26 @@ window.VFMedia = (() => {
     if (bg.type === "video") return els.backgroundVideo;
     return bg.visual === "scene3d" ? (window.__vfExportMode && window.__vfExportGLSnapshot || els.glCanvas) : els.visualCanvas;
   }
+  const browserDecode = new Set();
+  async function exportVideo(video, time, key) {
+    const endpoint = window.__vfFootageFramesEndpoint;
+    if (endpoint && !browserDecode.has(key)) {
+      try {
+        const frame = await window.VFFootageDecoder?.frame(key, time);
+        if (frame) return frame;
+      } catch (_) { /* Keep the established browser decoder as compatibility fallback. */ }
+      browserDecode.add(key);
+    }
+    await seekExact(video, time);
+    return video;
+  }
   async function exportSource(t) {
     if (!enabled()) {
       const source = legacySource();
       if (source === els.backgroundVideo) {
         const asset = activeBackgroundAsset("video");
         const value = resource({ ...asset, kind: "video" }); await waitReady(value);
-        await seekExact(value.element, t % value.element.duration); return { source: value.element, clip: null };
+        return { source: await exportVideo(value.element, t % value.element.duration, "__legacy"), clip: null };
       }
       if (source === els.backgroundImage) {
         const value = resource({ ...activeBackgroundAsset("image"), kind: "image" }); await waitReady(value);
@@ -167,13 +196,13 @@ window.VFMedia = (() => {
     return { source: value.element, clip };
   }
   async function exportBase(ctx, t, amplitude) {
-    if (!enabled()) { const { source, clip } = await exportSource(t); drawBase(ctx,source,clip,t,amplitude); return; }
+    if (!enabled()) { const { source, clip } = await exportSource(t); try { drawBase(ctx,source,clip,t,amplitude); } finally { source?.close?.(); } return; }
     drawBase(ctx,null,null,t,amplitude);
     for (const clip of activeLayers(t)) {
       let source;
       if (clip.asset.kind === "visual") source = VFVisualClips.render(clip,clip.in+(t-clip.start)*clip.rate,ctx.canvas.width,ctx.canvas.height);
-      else { const value=resource(clip.asset,clip.id); await waitReady(value); source=value.element; if (clip.asset.kind === "video") await seekExact(source,sourceTime(clip,t,source)); }
-      drawLayer(ctx,source,clip,t,amplitude);
+      else { const value=resource(clip.asset,clip.id); await waitReady(value); source=value.element; if (clip.asset.kind === "video") source=await exportVideo(source,sourceTime(clip,t,source),clip.id); }
+      try { drawLayer(ctx,source,clip,t,amplitude); } finally { source?.close?.(); }
     }
   }
   function drawLayer(ctx, source, clip, t, amplitude) {
@@ -200,23 +229,31 @@ window.VFMedia = (() => {
     if (enabled()) {
       drawBase(baseCtx,null,null,t,amplitude);
       const activeVideos=new Set();
+      // Each clip has its own decoder, even when it reuses the same asset.
+      // Pre-roll a trimmed clip before its visible cut, so decoder startup and
+      // clock convergence do not happen in the middle of a crossfade.
+      const upcoming=(project.background.clips||[]).filter(c=>c.start>t&&c.start-t<1)
+        .sort((a,b)=>a.start-b.start).slice(0,2);
+      for (const next of upcoming) {
+        if (next.asset.kind === "visual") continue;
+        const value=resource(next.asset,next.id);
+        if (next.asset.kind === "video" && value?.ready) {
+          const v=value.element, target=Math.max(0,Math.min(next.in+(t-next.start)*next.rate,v.duration-.001));
+          syncVideo(v,target,next.rate,playing&&target>0);
+          activeVideos.add(v);
+        }
+      }
       for (const layer of activeLayers(t)) {
       clip=layer;
       if (clip.asset.kind === "visual") { source=VFVisualClips.render(clip,clip.in+(t-clip.start)*clip.rate,width,height); drawLayer(baseCtx,source,clip,t,amplitude); continue; }
       const value = resource(clip.asset,clip.id);
       if (status && value && !value.ready) { status.hidden = false; status.textContent = value.error || `${window.t("Preparing video…")} ${clip.asset.name}`; }
-      // Warm only the next clip shortly before a cut, keeping decoding and memory bounded.
-      const next = (project.background.clips || []).filter(c => c.start > t && c.start - t < 2).sort((a,b) => a.start - b.start)[0];
-      if (next && next.asset.kind !== "visual" && next.asset.id !== clip?.asset.id) resource(next.asset,next.id);
       source = value?.ready ? value.element : null;
       if (value?.error && !value.reported) { value.reported = true; toast(value.error, "error"); }
       if (source && clip.asset.kind === "video") {
         activeVideos.add(source);
         const target = sourceTime(clip, t, source);
-        source.playbackRate = clip.rate;
-        if (Math.abs(source.currentTime - target) > (playing ? .2 : .015) && !source.seeking) source.currentTime = target;
-        if (playing && source.paused) source.play().catch(() => {});
-        else if (!playing && !source.paused) source.pause();
+        syncVideo(source, target, clip.rate, playing);
       }
       drawLayer(baseCtx,source,clip,t,amplitude);
       }
@@ -225,5 +262,5 @@ window.VFMedia = (() => {
     else drawBase(baseCtx,source,clip,t,amplitude);
     const ctx = overlay.getContext("2d"); ctx.clearRect(0, 0, width, height); drawOverlay(ctx, t, amplitude);
   }
-  return { enabled, usesCanvas, activeClip, preview, exportBase, drawOverlay, preload: resource };
+  return { enabled, usesCanvas, activeClip, preview, exportBase, drawOverlay, preload: resource, syncVideo };
 })();
