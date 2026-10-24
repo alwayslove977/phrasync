@@ -1,6 +1,6 @@
 # Phrasync 0.5.0
 
-GitHub source release. The matching Windows installer channel is [Microsoft Store](https://apps.microsoft.com/detail/9NF9JBG2PKHX), using package version 0.5.0.0. Store availability follows certification and rollout; the previous approved version remains available until then.
+GitHub source release. The matching Windows installer channel is [Microsoft Store](https://apps.microsoft.com/detail/9NF9JBG2PKHX). Package 0.5.0.0 was submitted for certification on October 24, 2026, with automatic publication after approval. The previous approved version remains available until rollout completes.
 
 Thanks to Especiel-EA for the detailed report, logs and experimental patches in [issue #5](https://github.com/jaydemks/phrasync/issues/5).
 

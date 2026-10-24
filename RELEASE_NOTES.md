@@ -1,6 +1,6 @@
 # Phrasync v0.5.0
 
-This maintenance release focuses on reliable video export, faster supported GPU rendering and closer preview/export synchronization. GitHub provides the source release. The matching Microsoft Store package is 0.5.0.0; Store availability follows certification and rollout, with the previous approved version remaining available in the meantime.
+This maintenance release focuses on reliable video export, faster supported GPU rendering and closer preview/export synchronization. GitHub provides the source release. The matching 0.5.0.0 Microsoft Store package was submitted for certification on October 24, 2026, with automatic publication after approval. The previous approved version remains available until rollout completes.
 
 Fix the local frame transport becoming blocked by an idle browser connection. Restore verified image/video references from older projects before rendering and report missing media early. Preserve the original browser error, stack and failing timeline time in Diagnostics instead of a generic missing-frame message.
 
