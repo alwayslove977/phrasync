@@ -52,7 +52,20 @@ not a bug in the app.
 
 **Requirements**
 
-- macOS 11.0 or later (`LSMinimumSystemVersion`).
+- **macOS 12.0 or later, with OCR requiring 13.4.** The spec declares 12.0 from
+  the measured floor instead of the hard-coded `11.0` it used to ship: `vtool
+  -show-build` over all 550 Mach-O files in the 0.4.7 bundle reports 371 files at
+  12.0 (`av`, numpy and most extension modules) and four at 13.4 (`onnxruntime`
+  1.23.2, used only by OCR). dyld refuses a library whose minimum is newer than
+  the running system, so 11.x cannot even import the core extensions. The 13.4
+  objects are reached only through `phrasync/ocr.py`, which imports them lazily
+  and turns a failed import into `OCRUnavailable`, so the declared floor stays at
+  12.0 for both build flavours and **OCR is not guaranteed on 12.0-13.3**;
+  everything else runs there. `PHRASYNC_BUILD_AI=0` removes the ONNX Runtime
+  payload and declares the same 12.0. The **published `v0.4.7-macos.1` zip
+  predates this change** and still declares 11.0; nothing was rebuilt. These
+  figures come from the load commands; no 12.x or 13.x machine was available to
+  run the bundle on.
 - **Intel (x86_64).** The published bundle contains only x86_64 code. On Apple
   Silicon it runs under Rosetta 2; that path was **not** tested on arm64 hardware.
 - ~2.5 GB free disk space (963.7 MB unpacked, plus the zip; measured on the

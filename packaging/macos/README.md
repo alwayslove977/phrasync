@@ -252,7 +252,30 @@ keeps an optional access-token field.
 
 * The current bundle is **x86_64 only** (`Mach-O thin (x86_64)`), produced on an
   Intel Mac. It runs natively on Intel and under Rosetta 2 on Apple Silicon.
-* `LSMinimumSystemVersion` is **11.0 (Big Sur)**.
+* `LSMinimumSystemVersion` is **derived from this table, not hard-coded**: both
+  build flavours declare `12.0`, the floor of every native dependency except ONNX
+  Runtime. It used to be a flat `11.0`, which was not what the bundle could load.
+  `vtool -show-build` over every Mach-O in the published bundle (550 files) gives:
+
+  | minos | files | examples |
+  | --- | --- | --- |
+  | 13.4 | 4 | `onnxruntime/capi/libonnxruntime.1.23.2.dylib`, `onnxruntime_pybind11_state.so` |
+  | 12.0 | 371 | `av/format.cpython-312-darwin.so`, most extension modules |
+  | 11.0 | 61 | `imageio_ffmpeg/binaries/ffmpeg-*-v7.1` |
+  | ≤ 10.16 | 114 | `libctranslate2` (10.13), `cv2` (10.16), `tokenizers` (10.12) |
+
+  dyld will not load a library whose minimum is newer than the running system, so
+  12.0 is the real floor for starting the app: below it the core extensions would
+  not import. The 13.4 row is a hard floor for **OCR only**. `phrasync/ocr.py`
+  imports RapidOCR lazily, catches the failure and falls back to Tesseract before
+  reporting OCR unavailable, so a 12.0-13.3 system runs every feature except OCR
+  instead of being locked out of the bundle -- which is why the spec declares 12.0
+  for the AI build too and keeps the higher number as `OCR_SYSTEM_VERSION`, the
+  value the build tests compare against this table. ONNX Runtime 1.23.2 is the
+  last release with a macOS x86_64 wheel (`requirements-ai.txt` pins it), so the
+  13.4 figure moves only when that dependency does. Nothing was measured on a 12.x
+  or 13.x machine; the numbers are load commands, not a launch test. The published
+  `v0.4.7-macos.1` zip was built before this change and still declares 11.0.
 * PyInstaller cannot cross-compile. The bootloader and every native extension come
   from the build interpreter, and Intel Macs cannot execute arm64 code at all
   (`hw.optional.arm64` is absent), so an arm64 bundle cannot be built or tested

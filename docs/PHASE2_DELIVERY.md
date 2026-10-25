@@ -56,7 +56,7 @@ PyInstaller 6.22.3 · x86_64 thin · ad-hoc · `Sealed Resources files=1813`。
 | --- | --- | --- |
 | 主程序架构 | `Mach-O 64-bit executable x86_64` | `file` / `lipo -archs` |
 | 原生库架构 | 全部 x86_64：`libpython3.12.dylib`、`libonnxruntime.1.23.2.dylib`、`ctranslate2/_ext…so`、`cv2.abi3.so`、`ffmpeg-macos-x86_64-v7.1`、`chrome-headless-shell` | 逐个 `lipo -archs` |
-| 最低系统版本 | macOS 11.0 | `Info.plist` `LSMinimumSystemVersion` |
+| 最低系统版本 | macOS 11.0（当时的 `Info.plist` 声明值，**并非真实下限**；后续已按 load command 实测改为 12.0，AI 包开关不改变该值。12.0 是由包内非 OCR 原生依赖推导的兼容目标，**未在 macOS 12 实机启动验证**。OCR 依赖要求 13.4，12.0–13.3 上 OCR 不保证可用；已发布的 `v0.4.7-macos.1` 压缩包**未重建**，仍声明 11.0） | `Info.plist` `LSMinimumSystemVersion`；修正见 `docs/MACOS_FIXES.md` |
 | 版本号 | 0.4.7 | `CFBundleShortVersionString` |
 | Bundle ID | `com.phrasync.desktop` | `codesign -dv` |
 | 签名 | ad-hoc，`TeamIdentifier=not set` | 同上 |

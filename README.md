@@ -2,6 +2,8 @@
 
 # Phrasync
 
+**English** · [简体中文](README_zh.md)
+
 Phrasync is a free, local studio for lyric videos and subtitles. Bring in a song or video, transcribe it on your computer, correct the words and their timing, choose how it looks, and export an MP4. Your media is not uploaded to a Phrasync service.
 
 Created by [jaydemks](https://github.com/jaydemks).
@@ -14,7 +16,17 @@ Created by [jaydemks](https://github.com/jaydemks).
 >
 > It is **not** an official release by jaydemks, it carries **no Developer ID
 > signature and no notarisation**, and the published bundle is **Intel (x86_64)
-> only**. Source, the full list of changes, install steps and known limitations:
+> only**. It needs **macOS 12.0 or later**: builds from this branch declare
+> `LSMinimumSystemVersion` **12.0**, the highest requirement among the bundle's
+> non-OCR native code (371 of its 550 Mach-O files). The four ONNX Runtime
+> objects that OCR loads require **13.4**, but only `phrasync/ocr.py` reaches
+> them, and it imports them lazily and converts the failure into "OCR
+> unavailable" -- so everything except OCR runs on 12.0, and **OCR is not
+> guaranteed on 12.0-13.3**. The **already-published 0.4.7 zip predates that fix
+> and still declares 11.0**, a value no part of it can load below 12.0. Both
+> numbers come from Mach-O load commands, not from a launch test on a 12.x or
+> 13.x machine.
+> Source, the full list of changes, install steps and known limitations:
 > [`docs/MACOS_FIXES.md`](docs/MACOS_FIXES.md).
 >
 > Download: [Releases — v0.4.7-macos.1](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.1).
