@@ -4,8 +4,8 @@ const CUE_PAGE_SIZE = 100;
 let cueListPage = 0;
 let cueListSelection = null;
 
-function cueListText(en, it) {
-  return document.documentElement.lang === "it" ? it : en;
+function cueListText(en) {
+  return typeof window !== "undefined" && typeof window.t === "function" ? window.t(en) : en;
 }
 
 function revealCueInList(id) {

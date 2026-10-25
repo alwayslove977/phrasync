@@ -6,6 +6,19 @@ Phrasync is a free, local studio for lyric videos and subtitles. Bring in a song
 
 Created by [jaydemks](https://github.com/jaydemks).
 
+> ### macOS build in this fork
+>
+> The `macos-fixes` branch of **[alwayslove977/phrasync](https://github.com/alwayslove977/phrasync)**
+> packages Phrasync 0.4.7 as a self-contained `.app` and fixes the defects that
+> prevented the upstream source from running as a standalone Mac application.
+>
+> It is **not** an official release by jaydemks, it carries **no Developer ID
+> signature and no notarisation**, and the published bundle is **Intel (x86_64)
+> only**. Source, the full list of changes, install steps and known limitations:
+> [`docs/MACOS_FIXES.md`](docs/MACOS_FIXES.md).
+>
+> Download: [Releases — v0.4.7-macos.1](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.1).
+
 ## Watch Phrasync in action
 
 https://github.com/user-attachments/assets/9ec2387b-2c79-4257-980f-3e578a12f39b
@@ -24,7 +37,7 @@ In both modes you can:
 - Build an edit from a media bin: drag images, videos and built-in 2D/3D visuals onto up to four background tracks. Move, trim, split or duplicate clips, adjust opacity and transitions, and animate pan/zoom. Right-click a clip for quick controls; unused tracks can be removed without deleting your source media.
 - Add black-and-white, gradients, particles and an audio-reactive spectrum; trigger shake, pendulum motion, flashes, zoom drops and light pulses from beats or detected transients. Spiral Flight and Word Constellation work with both 2D and 3D text. Flash effects are optional and can affect photosensitive viewers.
 - Set export IN/OUT with **I/O**, draggable timeline markers or exact seconds to render just a section. Timeline length follows your media automatically or can be set manually. Zoom stays at the playhead; middle-mouse dragging and the scrollbar let you move around.
-- Use local Faster-Whisper transcription, automatic language detection, and optional NVIDIA CUDA acceleration. The interface is in English by default, with an Italian toggle.
+- Use local Faster-Whisper transcription, automatic language detection, and optional NVIDIA CUDA acceleration. The interface is in English by default; upstream ships an Italian toggle, while the `macos-fixes` branch in this fork ships a Simplified Chinese toggle instead (see [`docs/MACOS_FIXES.md`](docs/MACOS_FIXES.md)).
 - Import lyrics or captions, extract text from an image with OCR, and export subtitle files including SRT, WebVTT, LRC, word-level LRC, and ASS karaoke.
 - Preview your work, save and reload a local project, run the preflight check, and export H.264 MP4. In the Windows app you can choose a render folder before export and open either that folder or the default one afterward.
 - Use **File → New / Load / Save** with Windows file dialogs and keyboard shortcuts. Choose the destination for subtitle exports too. MP4 export requires a chosen folder, writes one named file, and supports a custom bitrate such as 150 Mbps; a compatibility encoder helps with 4K when the browser codec is unavailable.

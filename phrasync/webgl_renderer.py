@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import platform
 import shutil
 import socket
 import subprocess
@@ -12,8 +14,9 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 from websockets.sync.client import connect
+from .config import ASSETS_DIR, discard, scratch_dir
 from .media import ffmpeg_exe
-from .processes import background_flags
+from .processes import background_flags, track
 from .encoding import bitrate_bps, rate_control_args
 from .diagnostics import log_event
 from .footage import effects_enabled
@@ -24,8 +27,44 @@ from .frame_bridge import frame_bridge
 
 ProgressCallback = Callable[[float, str], None]
 
+#: Architecture suffix used by the bundled ``chrome-headless-shell`` folder.
+#: One bundle only carries the runtime matching its own architecture, so an
+#: x86_64 build never picks up an arm64 runtime and the other way round.
+_HOST_ARCH = "arm64" if platform.machine() == "arm64" else "x64"
+
+
+def _bundled_browsers() -> list[Path]:
+    """Browser runtimes shipped inside the application bundle.
+
+    A bundled runtime makes the Odyssey export work on a Mac without Chrome or
+    Edge installed. ``PHRASYNC_BROWSER`` always wins so a build can be pinned to
+    a specific binary while debugging.
+    """
+    candidates: list[Path] = []
+    override = os.environ.get("PHRASYNC_BROWSER")
+    if override:
+        candidates.append(Path(override).expanduser())
+    browser_dir = os.environ.get("PHRASYNC_BROWSER_DIR")
+    roots = [Path(browser_dir).expanduser()] if browser_dir else [ASSETS_DIR / "browser"]
+    for root in roots:
+        candidates += [
+            root / "PhrasyncBrowser.app" / "Contents" / "MacOS" / "PhrasyncBrowser",
+            root / "Google Chrome for Testing.app" / "Contents" / "MacOS" / "Google Chrome for Testing",
+            root / "Chromium.app" / "Contents" / "MacOS" / "Chromium",
+            root / f"chrome-headless-shell-mac-{_HOST_ARCH}" / "chrome-headless-shell",
+            root / "chrome-headless-shell",
+        ]
+    return candidates
+
 
 def _browser_path() -> Path:
+    for candidate in _bundled_browsers():
+        if candidate.is_file():
+            return candidate
+    if os.environ.get("PHRASYNC_REQUIRE_BUNDLED_BROWSER") == "1":
+        # Diagnostic switch used by the acceptance tests: proves the export never
+        # silently falls back to a browser installed on the machine.
+        raise RuntimeError("The bundled export browser is missing from this build.")
     candidates = (
         shutil.which("chrome"),
         shutil.which("chromium"),
@@ -42,6 +81,18 @@ def _browser_path() -> Path:
         if candidate and Path(candidate).exists():
             return Path(candidate)
     raise RuntimeError("Chrome or Edge is required to export Odyssey WebGL video.")
+
+
+def browser_status() -> dict[str, Any]:
+    """Describe where the export browser comes from, for health reporting."""
+    for candidate in _bundled_browsers():
+        if candidate.is_file():
+            return {"available": True, "bundled": True, "path": str(candidate)}
+    try:
+        path = _browser_path()
+    except RuntimeError:
+        return {"available": False, "bundled": False, "path": ""}
+    return {"available": True, "bundled": False, "path": str(path)}
 
 
 def _free_port() -> int:
@@ -112,13 +163,16 @@ def _encode_canvas_ffmpeg(devtools, project, path, *, width, height, fps, frame_
         spec.get("visual") == "equalizer" or spec.get("sceneWave") for spec in visual_settings)
     start_time = float((project.get("exportRange") or {}).get("in", 0))
     spectrum = SpectrumSource(audio.path, fps, start_time=start_time) if audio and needs_spectrum else None
-    with tempfile.TemporaryFile() as errors:
-        encoder = subprocess.Popen([
+    # A named log file instead of TemporaryFile: opening an anonymous temporary
+    # file unlinks it immediately, which locked-down accounts refuse.
+    error_log = scratch_dir() / f"phrasync-ffmpeg-{os.getpid()}-{int(time.monotonic() * 1e6)}.log"
+    with open(error_log, "w+b") as errors:
+        encoder = track(subprocess.Popen([
             ffmpeg_exe(), "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgba",
             "-s:v", f"{width}x{height}", "-framerate", str(fps), "-i", "pipe:0", "-an", "-c:v", "libx264",
             "-preset", str(project.get("export", {}).get("preset", "medium")),
             *rate_control_args(project), "-pix_fmt", "yuv420p", "-f", "matroska", str(path),
-        ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errors, creationflags=background_flags())
+        ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errors, creationflags=background_flags()))
         try:
             def consume(data, index):
                 if cancel_check and cancel_check():
@@ -171,13 +225,17 @@ def _encode_canvas_ffmpeg(devtools, project, path, *, width, height, fps, frame_
             if encoder.poll() is None:
                 encoder.kill()
             encoder.wait(timeout=5)
-            path.unlink(missing_ok=True)
+            discard(path)
             raise
         finally:
             if spectrum:
                 spectrum.close()
             if encoder.stdin and not encoder.stdin.closed:
                 encoder.stdin.close()
+    try:
+        error_log.unlink()
+    except OSError:
+        pass  # the platform refused the delete; the file stays in the workspace
 
 
 def render_webgl_video(
@@ -197,7 +255,9 @@ def render_webgl_video(
     origin = _local_origin(project.get("__renderOrigin"))
     port = _free_port()
     browser = _browser_path()
-    encoded_path.unlink(missing_ok=True)
+    log_event("info", "render", f"Export browser: {browser} "
+              f"(bundled={any(browser == item for item in _bundled_browsers())})")
+    discard(encoded_path)
 
     clean_project = json.loads(json.dumps(project))
     clean_project.pop("__renderOrigin", None)
@@ -206,7 +266,8 @@ def render_webgl_video(
     bitrate = custom_bitrate or int(max(2_000_000, width * height * fps * 0.14))
     key_interval = max(1, fps * 2)
 
-    with tempfile.TemporaryDirectory(prefix="phrasync-webgl-", ignore_cleanup_errors=True) as folder:
+    with tempfile.TemporaryDirectory(prefix="phrasync-webgl-", dir=scratch_dir(),
+                                     ignore_cleanup_errors=True) as folder:
         temp_dir = Path(folder)
         profile = temp_dir / "profile"
         download = temp_dir / "download"
@@ -215,17 +276,25 @@ def render_webgl_video(
         flags = 0
         if hasattr(subprocess, "CREATE_NO_WINDOW"):
             flags = subprocess.CREATE_NO_WINDOW
-        process = subprocess.Popen(
+        # chrome-headless-shell is headless by construction and rejects the
+        # ``--headless=new`` switch. It also ships without the helper-app sandbox
+        # profile, so its GPU process needs the sandbox switches below before
+        # SwiftShader can create a WebGL2 context. The full runtime keeps the
+        # platform's default sandbox.
+        headless_shell = "headless-shell" in browser.name
+        headless_flags = ["--no-sandbox", "--disable-gpu-sandbox"] if headless_shell else ["--headless=new"]
+        process = track(subprocess.Popen(
             [
-                str(browser), "--headless=new", "--hide-scrollbars", "--mute-audio",
-                "--enable-webgl", "--enable-unsafe-swiftshader",
+                str(browser), *headless_flags, "--hide-scrollbars", "--mute-audio",
+                "--enable-webgl", "--enable-unsafe-swiftshader", "--no-first-run",
+                "--disable-background-networking", "--disable-sync",
                 f"--remote-debugging-port={port}", "--remote-allow-origins=*",
                 f"--user-data-dir={profile}", f"--window-size={width},{height}", "about:blank",
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=flags,
-        )
+        ))
         devtools: _DevTools | None = None
         try:
             devtools = _DevTools(_target_socket(port), port)

@@ -1,6 +1,47 @@
 from __future__ import annotations
 
+import os
+import shutil
+from pathlib import Path
+
 from PIL import Image, ImageOps
+
+
+def install_output(temporary: Path, destination: Path) -> None:
+    """Move a finished MP4 onto its reserved name without losing the render.
+
+    The atomic rename is the normal path. Some accounts and locations refuse to
+    replace an existing file even though the process owns it: managed folders,
+    network volumes, security software, or a sandbox that denies unlink. Losing
+    a completed encode to that refusal is never acceptable, so the reservation
+    file is removed first and, when the rename is still refused, the finished
+    bytes are copied over the reservation in place.
+    """
+    temporary = Path(temporary)
+    destination = Path(destination)
+    try:
+        os.replace(temporary, destination)
+        return
+    except OSError as refusal:
+        first_error = refusal
+    try:
+        destination.unlink()
+    except OSError:
+        pass  # the destination is either gone or will be overwritten below
+    try:
+        os.replace(temporary, destination)
+        return
+    except OSError:
+        pass
+    try:
+        with open(temporary, "rb") as source, open(destination, "wb") as target:
+            shutil.copyfileobj(source, target, 1024 * 1024)
+    except OSError:
+        raise first_error
+    try:
+        temporary.unlink()
+    except OSError:
+        pass  # the copy landed; the staging file is left for the user to remove
 
 
 def clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:

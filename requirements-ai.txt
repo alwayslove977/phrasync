@@ -2,6 +2,25 @@
 faster-whisper>=1.2.1,<2
 huggingface-hub==1.28.0
 rapidocr-onnxruntime>=1.3,<2
-onnxruntime>=1.18,<2
+
+# onnxruntime stopped publishing macOS x86_64 wheels after 1.23.2 (1.24+ is
+# arm64-only), so an Intel build has to stay on the last release that ships one.
+onnxruntime>=1.18,<2; platform_system != "Darwin" or platform_machine != "x86_64"
+onnxruntime>=1.18,<=1.23.2; platform_system == "Darwin" and platform_machine == "x86_64"
+
+# rapidocr-onnxruntime pulls opencv-python; recent OpenCV releases ship no macOS
+# x86_64 wheel, which makes pip fall back to a 40 minute CMake build. 4.10.0.84 is
+# the newest release with a macosx_12_0_x86_64 wheel (universal arm64 otherwise).
+opencv-python==4.10.0.84; platform_system == "Darwin" and platform_machine == "x86_64"
+
+# faster-whisper 1.2.1 still calls av.open(metadata_errors="ignore"), which PyAV
+# dropped in 15.0. Keep the decoder on the last line that accepts it.
+av>=11,<15
+
+# rapidocr-onnxruntime asks for an unbounded Pillow, which resolves above the
+# cap requirements.txt sets. Restating the cap keeps the combined environment
+# resolvable instead of pinning the whole app to a newer Pillow.
+Pillow>=10.4,<13
+
 nvidia-cublas-cu12>=12,<13; platform_system == "Windows"
 nvidia-cudnn-cu12>=9,<10; platform_system == "Windows"

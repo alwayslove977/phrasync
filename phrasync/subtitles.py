@@ -105,31 +105,66 @@ def parse_vtt(text: str) -> list[dict[str, Any]]:
 
 
 def parse_lrc(text: str, default_duration: float = 3.0) -> list[dict[str, Any]]:
+    timestamp_re = re.compile(
+        r"\[(?P<min>\d{1,3}):(?P<sec>\d{1,2}(?:[.:]\d{1,3})?)\]"
+    )
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    cues: list[dict[str, Any]] = []
+
+    def stamp(match: re.Match[str]) -> float:
+        return int(match.group("min")) * 60 + float(match.group("sec").replace(":", "."))
+
+    # Enhanced/character LRC: each timestamp starts the text following it.
+    for line in lines:
+        matches = list(timestamp_re.finditer(line))
+        if len(matches) < 2:
+            continue
+        words: list[dict[str, Any]] = []
+        for pos, match in enumerate(matches):
+            token = line[match.end():matches[pos + 1].start() if pos + 1 < len(matches) else len(line)].strip()
+            if not token:
+                continue
+            start = stamp(match)
+            end = stamp(matches[pos + 1]) if pos + 1 < len(matches) else start + default_duration
+            words.append({
+                "text": token,
+                "start": start,
+                "end": max(start + 0.01, end),
+            })
+        if not words:
+            continue
+        cue_start = words[0]["start"]
+        cue_end = max(cue_start + 0.05, max(word["end"] for word in words))
+        cues.append(normalize_cue({
+            "id": f"cue-{len(cues) + 1}",
+            "start": cue_start,
+            "end": cue_end,
+            "text": "".join(word["text"] for word in words),
+            "words": words,
+        }, len(cues)))
+
+    if cues:
+        return normalize_cues(cues)
+
+    # Standard line-level LRC fallback.
     points: list[tuple[float, str]] = []
-    for line in text.replace("\r\n", "\n").split("\n"):
+    for line in lines:
         match = LRC_RE.match(line.strip())
         if not match:
             continue
-        seconds_text = match.group("sec").replace(":", ".")
-        start = int(match.group("min")) * 60 + float(seconds_text)
+        start = int(match.group("min")) * 60 + float(match.group("sec").replace(":", "."))
         lyric = match.group("text").strip()
         if lyric:
             points.append((start, lyric))
     points.sort(key=lambda item: item[0])
-    cues: list[dict[str, Any]] = []
     for index, (start, lyric) in enumerate(points):
         next_start = points[index + 1][0] if index + 1 < len(points) else start + default_duration
-        cues.append(
-            normalize_cue(
-                {
-                    "id": f"cue-{index + 1}",
-                    "start": start,
-                    "end": max(start + 0.35, next_start - 0.03),
-                    "text": lyric,
-                },
-                index,
-            )
-        )
+        cues.append(normalize_cue({
+            "id": f"cue-{index + 1}",
+            "start": start,
+            "end": max(start + 0.35, next_start - 0.03),
+            "text": lyric,
+        }, index))
     return normalize_cues(cues)
 
 

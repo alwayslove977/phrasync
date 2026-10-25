@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,6 +13,7 @@ STATIC = ROOT / "static"
 APP_SCRIPTS = [
     "diagnostics.js",
     "i18n.js",
+    "i18n-dom.js",
     "app-state.js",
     "app-modes.js",
     "app-ocean.js",
@@ -32,6 +34,7 @@ APP_SCRIPTS = [
     "store-updates.js",
     "app-timeline.js",
     "app-export-range.js",
+    "app-fonts.js",
     "app.js",
 ]
 
@@ -43,8 +46,7 @@ def test_frontend_fragments_are_ordered_once_and_stay_focused():
         tag = f'<script src="/static/{name}" defer></script>'
         assert html.count(tag) == 1, name
         positions.append(html.index(tag))
-        limit = 450 if name == "i18n.js" else 400  # the translation dictionary grows with UI copy
-        assert len((STATIC / name).read_text(encoding="utf-8").splitlines()) <= limit, name
+        assert len((STATIC / name).read_text(encoding="utf-8").splitlines()) <= 400, name
     assert positions == sorted(positions)
 
 
@@ -133,9 +135,11 @@ def test_project_modes_and_environment_controls_are_wired():
     assert "cam.x + slot.x" not in scene
 
 
-def test_interface_defaults_to_english_and_offers_persistent_italian_toggle():
+def test_interface_defaults_to_english_and_offers_persistent_chinese_toggle():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     i18n = (STATIC / "i18n.js").read_text(encoding="utf-8")
+    dom = (STATIC / "i18n-dom.js").read_text(encoding="utf-8")
+    zh = (STATIC / "i18n-zh.js").read_text(encoding="utf-8")
     app = (STATIC / "app.js").read_text(encoding="utf-8")
 
     assert '<html lang="en"' in html
@@ -143,9 +147,31 @@ def test_interface_defaults_to_english_and_offers_persistent_italian_toggle():
     assert 'id="onboardingLanguageToggle"' in html
     assert 'id="onboardingDialog"' in html
     assert "Your first transcription downloads an AI model" in html
+    # The dictionary must be registered before the engine reads it, and the DOM
+    # half runs last because it needs both.
+    dictionary_tag = html.index('src="/static/i18n-zh.js"')
+    engine_tag = html.index('src="/static/i18n.js"')
+    dom_tag = html.index('src="/static/i18n-dom.js"')
+    assert dictionary_tag < engine_tag < dom_tag
+    assert "window.PHRASYNC_I18N = {" in zh
+    assert '"zh-CN": {' in zh
+    assert '"File": "文件"' in zh
+    assert "const DICTIONARIES = window.PHRASYNC_I18N || {};" in i18n
+    assert 'code: "zh-CN"' in i18n and 'code: "en"' in i18n
     assert 'const LANGUAGE_KEY = "phrasync.language"' in i18n
     assert 'currentLanguage = "en"' in i18n
-    assert '"Start creating": "Inizia a creare"' in i18n
+    # The language state has one declaration and one writer: the engine owns
+    # both, and the DOM half can only go through setCurrentLanguage().
+    assert i18n.count("let currentLanguage") == 1
+    assert "currentLanguage = " not in dom
+    assert "setCurrentLanguage(" in dom
+    # The toggle flips between exactly the two supported languages and the choice persists.
+    assert 'currentLanguage === "zh-CN" ? "en" : "zh-CN"' in dom
+    assert "localStorage.setItem(LANGUAGE_KEY, next)" in dom
+    assert "setCurrentLanguage(preferredLanguage())" in dom
+    # The Italian dictionary is gone, not shadowed by a leftover branch.
+    assert "Inizia a creare" not in i18n and "Inizia a creare" not in zh
+    assert 'code: "it"' not in i18n
     assert "initI18n();" in app
 
 
@@ -175,3 +201,108 @@ def test_desktop_preview_limits_expensive_idle_work():
     assert "IS_DESKTOP_HOST ? 1" in timeline
     assert ".desktop-host .topbar" in styles
     assert "backdrop-filter: none" in styles
+
+
+def test_custom_font_selector_keeps_its_contract():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is not installed")
+    fonts_js = STATIC / "app-fonts.js"
+    assert fonts_js.read_text(encoding="utf-8").splitlines()[0] == '"use strict";'
+    probe = """
+const fs = require("fs");
+const vm = require("vm");
+const assert = require("assert");
+
+function makeElement(tag) {
+  const el = {
+    tagName: tag.toUpperCase(), dataset: {}, children: [], options: [],
+    value: "", textContent: "", title: "", label: "", handlers: {}, clicks: 0,
+    addEventListener(type, handler) { el.handlers[type] = handler; },
+    appendChild(node) {
+      el.children.push(node);
+      if (node.tagName === "OPTGROUP") el.options.push(...node.children);
+      return node;
+    },
+    querySelectorAll() { return []; },
+    click() { el.clicks += 1; }
+  };
+  return el;
+}
+
+const added = [];
+const fetchCalls = [];
+const sandbox = {
+  console: console,
+  els: {
+    fontPreset: makeElement("select"),
+    fontPick: makeElement("button"),
+    fontInput: makeElement("input")
+  },
+  project: { style: { fontPath: "Demo.ttf" } },
+  stageCalls: 0,
+  saveCalls: 0,
+  applyStageStyle() { sandbox.stageCalls += 1; },
+  scheduleSave() { sandbox.saveCalls += 1; },
+  handleFontFile() {},
+  fetch: async (url, init) => {
+    fetchCalls.push([url, init]);
+    return { ok: true, json: async () => ({ fonts: [{ filename: "Demo.ttf", name: "Demo Font" }] }) };
+  },
+  FontFace: class FontFace {
+    constructor(family, src) { this.family = family; this.src = src; }
+    async load() { return this; }
+  },
+  document: {
+    createElement: tag => makeElement(tag),
+    fonts: { add(face) { added.push(face); } }
+  }
+};
+sandbox.window = sandbox;
+vm.runInContext(fs.readFileSync(process.env.PHRASYNC_FONTS_JS, "utf8"), vm.createContext(sandbox));
+
+(async () => {
+  assert.equal(typeof sandbox.loadCustomFonts, "function", "loadCustomFonts() must stay global");
+  assert.equal(typeof sandbox.bindFontControls, "function", "bindFontControls() must be exposed");
+
+  const select = sandbox.els.fontPreset;
+  sandbox.bindFontControls();
+  sandbox.els.fontPick.handlers.click();
+  assert.equal(sandbox.els.fontInput.clicks, 1, "the font button must still open the file dialog");
+
+  await sandbox.loadCustomFonts();
+
+  assert.deepEqual(fetchCalls[0], ["/api/fonts", { cache: "no-store" }]);
+  const group = select.children[0];
+  assert.equal(group.tagName, "OPTGROUP");
+  assert.equal(group.label, "Custom fonts · ~/phrasync/fonts");
+  const option = group.children[0];
+  assert.equal(option.value, "custom:Demo.ttf");
+  assert.equal(option.textContent, "Demo Font");
+  assert.equal(option.title, "Demo.ttf");
+  assert.equal(option.dataset.customFont, "true");
+  assert.equal(option.dataset.fontPath, "Demo.ttf");
+  assert.equal(option.dataset.fontFamily, '"PhrasyncCustomFont0"');
+  assert.equal(added.length, 1, "the preview face must be registered once");
+  assert.equal(added[0].family, "PhrasyncCustomFont0");
+  assert.equal(added[0].src, 'url("/api/fonts/file/Demo.ttf")');
+  assert.equal(select.value, "custom:Demo.ttf", "a saved style.fontPath must be re-selected");
+
+  select.selectedOptions = [option];
+  select.handlers.change();
+  assert.equal(sandbox.project.style.fontPath, "Demo.ttf");
+  assert.equal(sandbox.stageCalls, 1);
+  assert.equal(sandbox.saveCalls, 1);
+
+  select.selectedOptions = [makeElement("option")];
+  select.handlers.change();
+  assert.equal("fontPath" in sandbox.project.style, false, "a preset must clear style.fontPath");
+  assert.equal(sandbox.saveCalls, 2);
+})().catch(error => { console.error(error.message); process.exit(1); });
+"""
+    result = subprocess.run(
+        [node, "-"], input=probe, capture_output=True, text=True,
+        encoding="utf-8", timeout=30,
+        env={**os.environ, "PHRASYNC_FONTS_JS": str(fonts_js)},
+    )
+    assert result.returncode == 0, result.stderr

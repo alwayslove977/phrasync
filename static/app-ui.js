@@ -378,7 +378,13 @@ function applyStageStyle() {
   els.stage.style.setProperty("--lyric-stroke", style.strokeColor);
   els.stage.style.setProperty("--lyric-stroke-width", `${Math.max(0, style.strokeWidth * scale)}px`);
   els.stage.style.setProperty("--lyric-shadow", `0 ${style.shadow * scale * .75}px ${style.shadow * scale * 2.1}px rgba(0,0,0,.72)`);
-  els.stage.style.setProperty("--stage-font", fontStacks[style.fontPreset] || fontStacks.impact);
+  const customOption = [...els.fontPreset.options].find(
+    option => option.dataset.fontPath && option.dataset.fontPath === style.fontPath
+  );
+  const previewFont = customOption?.dataset.fontFamily
+    || fontStacks[style.fontPreset]
+    || fontStacks.impact;
+  els.stage.style.setProperty("--stage-font", previewFont);
   els.stage.style.setProperty("--shade-opacity", bg.shade);
   els.stage.style.setProperty("--grain-opacity", bg.grain);
   els.stage.style.setProperty("--background-blur", `${bg.blur * scale}px`);

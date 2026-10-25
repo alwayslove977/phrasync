@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable
 
-from .config import WORKSPACE
+from .config import WORKSPACE, BUNDLED_MODELS_DIR
 from .cuda import cuda_diagnostics, cuda_runtime_available
 from .language_map import (
     build_language_map,
@@ -573,6 +573,7 @@ def transcribe_audio(
         MODEL_DIR,
         progress=progress,
         cancel_check=cancel_check,
+        bundled_root=BUNDLED_MODELS_DIR,
     )
     _guard(cancel_check)
     device, compute_type = _device_config()

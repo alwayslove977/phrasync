@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
-import tempfile
+import time
 from pathlib import Path
 from typing import Callable
 
 import numpy as np
+from .config import discard, scratch_dir
 from .processes import background_flags
 
 try:
@@ -120,7 +122,11 @@ def iter_audio_mono(path: Path, sample_rate: int = 8000):
     """Stream bounded PCM blocks with the base FFmpeg dependency only."""
     command = [ffmpeg_exe(), "-v", "error", "-i", str(path), "-vn", "-ac", "1",
                "-ar", str(sample_rate), "-f", "f32le", "pipe:1"]
-    with tempfile.TemporaryFile() as errors:
+    # A named log instead of TemporaryFile: an anonymous temporary file is
+    # unlinked the moment it is opened, which locked-down accounts refuse.
+    error_log = scratch_dir() / f"phrasync-audio-{os.getpid()}-{int(time.monotonic() * 1e6)}.log"
+    errors = open(error_log, "w+b")
+    try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors, creationflags=background_flags())
         try:
             while True:
@@ -136,6 +142,9 @@ def iter_audio_mono(path: Path, sample_rate: int = 8000):
             if process.poll() is None:
                 process.terminate()
             process.wait()
+    finally:
+        errors.close()
+        discard(error_log)
 
 
 def decode_test(path: Path) -> tuple[bool, str]:

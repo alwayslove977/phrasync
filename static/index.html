@@ -410,7 +410,7 @@
               <select id="qualitySelect"><option value="18">High / CRF 18</option><option value="21">Balanced / CRF 21</option><option value="15">Very high / CRF 15</option></select>
             </label>
             <label class="field"><span>Video rate control</span><select id="rateControlSelect"><option value="auto">Automatic quality (CRF)</option><option value="bitrate">Custom bitrate (Mbps)</option></select></label>
-            <label class="field" id="bitrateField" hidden><span>Video bitrate (Mbps)</span><input id="bitrateInput" type="number" min="0.001" step="any" value="50" /><small>For example: 50 or 150 Mbps. Higher rates create larger files.</small></label>
+            <label class="field" id="bitrateField" hidden><span>Video bitrate (Mbps)</span><input id="bitrateInput" type="number" min="0.001" step="any" value="50" aria-label="Video bitrate in Mbps" /><small>For example: 50 or 150 Mbps. Higher rates create larger files.</small></label>
             <label class="toggle-row"><input id="safeAreaToggle" type="checkbox" /><span><b>Show title-safe guide</b></span></label>
           </div>
         </details>
@@ -575,6 +575,13 @@
     <form method="dialog" class="modal-card">
       <header><div><span class="eyebrow">PHRASYNC</span><h2>Settings &amp; about</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></header>
       <div class="settings-content">
+        <section class="integration-card language-card">
+          <div class="integration-heading"><div><strong>Interface language</strong><span>Applies immediately and is remembered on this Mac.</span></div></div>
+          <label class="settings-field"><span>Language</span>
+            <select id="languageSelect" aria-label="Interface language"></select>
+          </label>
+          <small>Only the interface changes. Lyrics, subtitles, project files and exported videos keep their original language.</small>
+        </section>
         <section class="integration-card about-card">
           <div class="integration-heading"><div><strong>Phrasync</strong><span id="aboutVersion">Version 0.4.5</span></div><span class="integration-badge">FREE · LOCAL</span></div>
           <p>Local lyric-video and subtitle studio. Transcription, editing and rendering run on your computer.</p>
@@ -655,7 +662,9 @@
 
   <div class="toast-stack" id="toastStack" aria-live="polite"></div>
   <script src="/static/diagnostics.js" defer></script>
+  <script src="/static/i18n-zh.js" defer></script>
   <script src="/static/i18n.js" defer></script>
+  <script src="/static/i18n-dom.js" defer></script>
   <script src="/static/kinetic.js" defer></script>
   <script src="/static/scene3d.js" defer></script>
   <script src="/static/scene3d-draw.js" defer></script>
@@ -681,6 +690,7 @@
   <script src="/static/store-updates.js" defer></script>
   <script src="/static/app-timeline.js" defer></script>
   <script src="/static/app-export-range.js" defer></script>
+  <script src="/static/app-fonts.js" defer></script>
   <script src="/static/app.js" defer></script>
 </body>
 </html>

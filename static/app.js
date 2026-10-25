@@ -21,8 +21,7 @@ function bindControls() {
   els.ocrInput.addEventListener("change", () => handleOCRFile(els.ocrInput.files[0]));
   els.lyricsPick.addEventListener("click", () => els.lyricsInput.click());
   els.lyricsInput.addEventListener("change", () => handleLyricsFile(els.lyricsInput.files[0]));
-  els.fontPick.addEventListener("click", () => els.fontInput.click());
-  els.fontInput.addEventListener("change", () => handleFontFile(els.fontInput.files[0]));
+  bindFontControls();
   els.transcribeButton.addEventListener("click", () => transcribeSong());
   els.cancelTranscription.addEventListener("click", stopTranscription);
 
@@ -227,7 +226,8 @@ function bindControls() {
       els.audioPlayer.pause(); project = loaded;
       analysis = null; analysisPending = false; selectedWordIndex = 0; tapArmed = false; tapQueue = [];
       selectedCueId = project.cues[0]?.id || null;
-      applyProjectToControls(); updateSyncSummary(); timeline?.fitAll(); seekTo(0); scheduleSave();
+      applyProjectToControls();
+  loadCustomFonts(); updateSyncSummary(); timeline?.fitAll(); seekTo(0); scheduleSave();
       toast("Project loaded. Media links refer to this local Phrasync workspace.", "success");
       if (project.audioAssetId) ensureAnalysis();
   };
@@ -373,6 +373,7 @@ function init() {
   initFootage();
   initEditorTools();
   applyProjectToControls();
+  loadCustomFonts();
   els.audioPlayer.volume = Number(els.volumeSlider.value);
   updateRangeUI(els.volumeSlider);
   checkHealth();

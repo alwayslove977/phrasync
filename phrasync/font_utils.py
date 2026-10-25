@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PIL import ImageFont
 
-from .config import ASSETS_DIR
+from .config import ASSETS_DIR, CUSTOM_FONTS_DIR
 
 FONT_EXTENSIONS = {".ttf", ".otf", ".ttc"}
 
@@ -129,10 +129,51 @@ _PRESET_NAMES = {
 }
 
 
+
+# Writable font folder. From source this is the repo's fonts/ directory; in a
+# packaged app it resolves to ~/Library/Application Support/Phrasync/fonts so a
+# read-only bundle never needs writes for user-supplied fonts.
+CUSTOM_FONT_DIR = CUSTOM_FONTS_DIR
+
+
+def resolve_custom_font_path(filename: str | None) -> Path | None:
+    """Resolve a custom font strictly inside the project's fonts directory."""
+    if not filename:
+        return None
+    name = Path(str(filename)).name
+    if name != str(filename) or Path(name).suffix.lower() not in FONT_EXTENSIONS:
+        return None
+    candidate = CUSTOM_FONT_DIR / name
+    try:
+        if candidate.is_file() and candidate.resolve().parent == CUSTOM_FONT_DIR.resolve():
+            return candidate
+    except OSError:
+        pass
+    return None
+
+
+def list_custom_fonts() -> list[dict[str, str]]:
+    """List custom fonts and their embedded family names."""
+    CUSTOM_FONT_DIR.mkdir(parents=True, exist_ok=True)
+    result = []
+    for path in sorted(CUSTOM_FONT_DIR.iterdir(), key=lambda p: p.name.casefold()):
+        if not path.is_file() or path.suffix.lower() not in FONT_EXTENSIONS:
+            continue
+        try:
+            font = ImageFont.truetype(str(path), 24)
+            family, style = font.getname()
+            display_name = f"{family} {style}".strip()
+        except Exception:
+            display_name = path.stem
+        result.append({"filename": path.name, "name": display_name})
+    return result
+
+
 def font_directories() -> list[Path]:
     home = Path.home()
     system = platform.system().lower()
     directories: list[Path] = []
+    directories.append(CUSTOM_FONT_DIR)
     if system == "windows":
         windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
         directories.extend([windir / "Fonts", home / "AppData/Local/Microsoft/Windows/Fonts"])
@@ -233,13 +274,32 @@ def load_font_for_text(size: int, preset: str, text: str, custom_path: Path | No
         return font
     if _covers_japanese_text(font, text):
         return font
+    candidates = []
     for candidate in _PRESET_NAMES["jgothic"]:
         path = index_fonts().get(candidate.lower())
         if path:
-            replacement = _load_font_cached(str(path), max(8, int(size)))
-            if _covers_japanese_text(replacement, text):
-                return replacement
-    raise ValueError("No Japanese font is available for this text")
+            candidates.append(path)
+
+    # Always try the bundled Japanese font, even when it is not indexed.
+    bundled_font = ASSETS_DIR / "NotoSansJP-VF.ttf"
+    if bundled_font.is_file():
+        candidates.append(bundled_font)
+
+    # Search all indexed fonts as well, including fonts with Chinese glyphs.
+    for path in index_fonts().values():
+        if path not in candidates:
+            candidates.append(path)
+
+    seen = set()
+    for path in candidates:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        replacement_font = _load_font_cached(key, max(8, int(size)))
+        if _covers_japanese_text(replacement_font, text):
+            return replacement_font
+    raise ValueError(f"No suitable CJK font is available for text: {text!r}")
 
 
 def font_status() -> dict:

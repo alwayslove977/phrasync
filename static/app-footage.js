@@ -18,25 +18,6 @@ const footageEffects = [
   ["spectrum", "Spectrum intensity (%)", 150], ["bpm", "Effect tempo (BPM, 0 = audio analysis)", 300],
   ["drop", "Beat drop zoom (%)", 30], ["pulse", "Beat light pulse (%)", 40]
 ];
-Object.assign(ITALIAN, {
-  "Footage & effects": "Montaggio e effetti", "Use footage timeline": "Usa traccia di sfondo",
-  "Add images / videos": "Aggiungi immagini / video", "Background footage": "Clip di sfondo",
-  "Select a clip": "Seleziona un clip", "Duplicate clip": "Duplica clip", "Remove clip": "Rimuovi clip",
-  "Split at playhead": "Dividi al cursore", "Move the playhead inside the selected clip.": "Sposta il cursore all'interno del clip selezionato.",
-  "Black & white": "Bianco e nero", "Pendulum (degrees)": "Pendolo (gradi)", "Beat shake (%)": "Shake a tempo (%)",
-  "Beat flash (%)": "Flash a tempo (%)", "Gradient opacity (%)": "Opacità gradiente (%)", "Particles": "Particelle",
-  "Spectrum intensity (%)": "Intensità spettro (%)", "Effect tempo (BPM, 0 = audio analysis)": "Tempo effetti (BPM, 0 = analisi audio)",
-  "Timeline start (s)": "Inizio sulla timeline (s)", "Timeline end (s)": "Fine sulla timeline (s)",
-  "Source in (s)": "Inizio nel file (s)", "Playback speed": "Velocità riproduzione",
-  "Zoom start": "Zoom iniziale", "Zoom end": "Zoom finale", "Pan start X": "Pan iniziale X", "Pan start Y": "Pan iniziale Y",
-  "Pan end X": "Pan finale X", "Pan end Y": "Pan finale Y",
-  "Drag = move · edges = trim · double click = edit": "Trascina = sposta · bordi = taglia · doppio clic = modifica",
-  "Color 1": "Colore 1", "Color 2": "Colore 2",
-  "Clip changes do not alter the original files. Video sound is muted; the song remains the audio track.": "I clip non modificano i file originali. I video sono muti: la canzone rimane la traccia audio.",
-  "Pan uses -1 to +1. Zoom above 1 creates space for panning. Gaps show the background color; overlapping clips use the latest start.": "Pan da -1 a +1. Zoom oltre 1 crea spazio per il movimento. I vuoti mostrano il colore di sfondo; se i clip si sovrappongono prevale quello che inizia dopo.",
-  "Flash warning: bright flashes can affect photosensitive viewers. Keep intensity low or leave this effect off.": "Attenzione: i flash luminosi possono disturbare persone fotosensibili. Usa intensità basse o lascia l'effetto spento."
-});
-
 function selectedFootage() { return (project.background.clips || []).find(c => c.id === selectedFootageId); }
 function constrainFootage(clip) {
   clip.start = Math.max(0, Number(clip.start) || 0);

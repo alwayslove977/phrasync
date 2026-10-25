@@ -131,7 +131,13 @@ def syllable_weight(token: str) -> float:
 
 def cue_words(cue: dict[str, Any]) -> list[dict[str, Any]]:
     """Word list for a cue, always timed and monotonic."""
-    tokens = str(cue.get("text", "")).replace("\n", " ").split()
+    text = str(cue.get("text", "")).replace("\n", " ")
+    token_re = re.compile(
+        r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF]"
+        r"|[^\W_]+(?:['’][^\W_]+)*|[^\w\s]",
+        re.UNICODE,
+    )
+    tokens = token_re.findall(text)
     if not tokens:
         return []
     stored = [w for w in (cue.get("words") or []) if str(w.get("text", "")).strip()]

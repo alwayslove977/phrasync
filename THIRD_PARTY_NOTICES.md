@@ -38,3 +38,32 @@ The Japanese MP4-export fallback font at `assets/NotoSansJP-VF.ttf` is Noto Sans
 from the [Google Fonts repository](https://github.com/google/fonts/tree/main/ofl/notosansjp),
 licensed under the SIL Open Font License 1.1. Its copyright notice and complete
 license are included in `assets/NotoSansJP-OFL.txt` and bundled with the app.
+
+## Chromium (headless shell) — macOS bundle only
+
+The macOS application bundle distributed from this fork contains a
+`chrome-headless-shell` runtime at
+`assets/browser/chrome-headless-shell-mac-x64/`, used by the Odyssey/WebGL export
+path. It is Chromium, licensed BSD-3-Clause; the complete third-party licence
+text that ships with the binary is
+`assets/browser/chrome-headless-shell-mac-x64/LICENSE.headless_shell`.
+
+Reported version: `Google Chrome for Testing 148.0.7778.96` (Playwright 1.64,
+runtime build `chromium_headless_shell-1223`). Chrome for Testing builds carry
+Google branding, so redistributing this folder on a public download page may
+require permission from Google. See `assets/browser/README.md`.
+
+The runtime is **not** in this repository; it is added locally before building.
+Do not describe it as Apache-2.0 or as project code.
+
+## Faster-Whisper `tiny` model — macOS bundle only
+
+The macOS bundle contains a CTranslate2 conversion of OpenAI Whisper `tiny`:
+
+* Repository: `Systran/faster-whisper-tiny` (revision
+  `d90ca5fe260221311c53c58e660288d3deb8d356`), MIT License.
+* Original model: `openai/whisper-tiny`, MIT License.
+* Files bundled: `model.bin`, `config.json`, `tokenizer.json`, `vocabulary.txt`.
+
+Only this model is bundled. Larger models are downloaded by the user on demand
+through Hugging Face and stay in the user's workspace, outside the app bundle.

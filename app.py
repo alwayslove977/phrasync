@@ -38,7 +38,7 @@ from phrasync.config import (
 )
 from phrasync.align import align_cues, alignment_stats, estimate_offset
 from phrasync.audio_analysis import AnalysisUnavailable, analyze_audio
-from phrasync.font_utils import font_status
+from phrasync.font_utils import font_status, list_custom_fonts, resolve_custom_font_path
 from phrasync.jobs import manager
 from phrasync.desktop_export import DesktopExportBridge
 from phrasync.media import ffmpeg_exe, probe_duration
@@ -145,6 +145,9 @@ def health() -> dict[str, Any]:
     except Exception as exc:
         ffmpeg = str(exc)
         ffmpeg_ok = False
+    # Imported lazily: the WebGL exporter pulls in a websocket client that is
+    # only needed when rendering, never while answering health checks.
+    from phrasync.webgl_renderer import browser_status
     return {
         "app": APP_NAME,
         "version": APP_VERSION,
@@ -155,9 +158,23 @@ def health() -> dict[str, Any]:
         "ocr": ocr_status(),
         "transcription": transcription_status(),
         "fonts": font_status(),
+        "browser": browser_status(),
         "cudaPaths": CUDA_PATHS,
         "gpu": cuda_diagnostics(),
     }
+
+
+@app.get("/api/fonts")
+def custom_fonts() -> dict[str, Any]:
+    return {"fonts": list_custom_fonts()}
+
+
+@app.get("/api/fonts/file/{filename}")
+def custom_font_file(filename: str):
+    font_path = resolve_custom_font_path(filename)
+    if not font_path or not font_path.is_file():
+        raise HTTPException(status_code=404, detail="Font not found")
+    return FileResponse(font_path)
 
 
 @app.get("/api/instance")
@@ -238,6 +255,11 @@ def shutdown(request: Request) -> dict[str, bool]:
     _require_local_request(request)
     if server is None:
         raise HTTPException(status_code=409, detail="This server is not managed by the launcher")
+    # Unfinished work stops at its next checkpoint so the process can exit
+    # without waiting for a render or transcription that nobody is watching.
+    requested = manager.cancel_all()
+    if requested:
+        log_event("info", "app", f"Asked {requested} unfinished job(s) to stop before shutdown")
     server.should_exit = True
     return {"stopping": True}
 

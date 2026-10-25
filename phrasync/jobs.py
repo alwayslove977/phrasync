@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+import time
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -11,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import JOBS_DIR, RENDERS_DIR
+from .config import JOBS_DIR, RENDERS_DIR, discard
 from .diagnostics import log_event, log_exception
 from .align import align_cues, alignment_stats
 from .audio_analysis import analyze_audio
@@ -285,7 +286,7 @@ class JobManager:
             log_event("info" if postflight.ok else "error", "render", f"Job {job.id[:8]} {'complete' if postflight.ok else 'failed postflight'}")
         except Exception as exc:
             if output_reserved and output_path is not None and output_path.exists() and output_path.stat().st_size == 0:
-                output_path.unlink()
+                discard(output_path)  # cleanup must not mask the real error
             log_exception("render", exc)
             with self.lock:
                 job.state = "cancelled" if job.cancel_requested else "failed"
@@ -308,6 +309,43 @@ class JobManager:
             job.message = "Cancellation requested"
             self._save(job)
             return True
+
+    def cancel_all(self, message: str = "Stopping because Phrasync is closing") -> int:
+        """Ask every unfinished job to stop; used when the app is shutting down.
+
+        A worker stops at its next checkpoint instead of abandoning the job, so a
+        half-written export is removed by the normal failure path rather than
+        being left behind under the user's name.
+        """
+        requested = 0
+        with self.lock:
+            for job in self.jobs.values():
+                if job.state in {"queued", "running"}:
+                    job.cancel_requested = True
+                    job.message = message
+                    self._save(job)
+                    requested += 1
+        return requested
+
+    def wait_idle(self, timeout: float = 8.0) -> int:
+        """Wait for unfinished jobs to stop; return how many are still running."""
+        deadline = time.monotonic() + max(0.0, timeout)
+        while True:
+            with self.lock:
+                active = [job for job in self.jobs.values() if job.state in {"queued", "running"}]
+            if not active:
+                return 0
+            if time.monotonic() >= deadline:
+                return len(active)
+            time.sleep(0.1)
+
+    def shutdown(self) -> None:
+        """Retire the worker pool so no idle thread outlives the window.
+
+        ``concurrent.futures`` joins its workers at interpreter exit, so leaving
+        the pool alive makes the process depend on those threads finishing.
+        """
+        self.executor.shutdown(wait=False, cancel_futures=True)
 
     def output_path(self, job_id: str) -> Path | None:
         job = self.get(job_id)

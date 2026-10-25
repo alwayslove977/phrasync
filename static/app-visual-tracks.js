@@ -1,15 +1,5 @@
 "use strict";
 
-Object.assign(ITALIAN, {
-  "Add current visual to bin":"Aggiungi visual corrente alla libreria", "Add background track":"Aggiungi traccia di sfondo",
-  "Select an integrated visual above, add it to the bin, then drag it onto a track. Higher tracks appear over lower ones; adjust opacity and transitions to mix them.":"Scegli un visual integrato sopra, aggiungilo alla libreria e trascinalo su una traccia. Le tracce superiori coprono quelle inferiori; regola opacità e transizioni per combinarle.",
-  "Track":"Traccia", "Transition":"Transizione", "Cut":"Taglio", "Crossfade":"Dissolvenza", "Wipe":"Tendina", "Slide":"Scorrimento",
-  "Clip opacity":"Opacità clip", "Transition in (s)":"Transizione in entrata (s)", "Transition out (s)":"Transizione in uscita (s)",
-  "Beat drop zoom (%)":"Drop zoom a tempo (%)", "Beat light pulse (%)":"Impulso luminoso a tempo (%)",
-  "Don't show this again":"Non mostrare più", "Maximum four background tracks.":"Massimo quattro tracce di sfondo.",
-  "Effect trigger":"Attivazione effetti", "Beat grid":"Griglia dei beat", "Detected audio transients":"Transienti audio rilevati",
-  "Remove track":"Rimuovi traccia", "Remove this track and its clips? Original media stays in the bin.":"Rimuovere questa traccia e i suoi clip? I media originali restano nella libreria."
-});
 function removeBackgroundTrack(index) {
   const bg = project.background, tracks = bg.tracks || ["V1"];
   if (!Number.isInteger(index) || index < 0 || index >= tracks.length) return;
@@ -21,16 +11,33 @@ function removeBackgroundTrack(index) {
   if (!bg.tracks.length) bg.footageEnabled = false;
   refreshFootageControls(); footageChanged();
 }
+/* Both of these strings are assembled around the track name, so the finished
+ * pair is registered: "V1 · 轨道 1" is neither a dictionary entry nor a
+ * pattern. The Chinese rendering is built even while English is active, so the
+ * record exists before the first switch and a language change does not depend
+ * on the controls being redrawn. */
+function trackOptionLabel(name, index) {
+  const english = `${name} · Track ${index + 1}`;
+  const chinese = `${name} · ${t("Track", "zh-CN")} ${index + 1}`;
+  rememberSource(chinese, english, "zh-CN");
+  return currentLanguage === "zh-CN" ? chinese : english;
+}
+function removeTrackLabel(name) {
+  const english = `Remove track ${name}`;
+  const chinese = `${t("Remove track", "zh-CN")} ${name}`;
+  rememberSource(chinese, english, "zh-CN");
+  return currentLanguage === "zh-CN" ? chinese : english;
+}
 function refreshVisualTrackControls(clip) {
   const select = document.getElementById("clipTrack"); if (!select) return;
   const tracks = project.background.tracks ||= ["V1"];
   select.replaceChildren();
-  tracks.forEach((name,i) => { const option = document.createElement("option"); option.value=i; option.textContent = `${name} · ${t("Track")} ${i+1}`; select.append(option); });
+  tracks.forEach((name,i) => { const option = document.createElement("option"); option.value=i; option.textContent = trackOptionLabel(name, i); select.append(option); });
   const manager = document.getElementById("backgroundTrackManager"); manager.replaceChildren();
   tracks.forEach((name,i) => {
     const row = document.createElement("div"), label = document.createElement("span"), remove = document.createElement("button");
     label.textContent = `${name} · ${(project.background.clips || []).filter(c => (c.track||0)===i).length} clips`;
-    remove.type="button"; remove.textContent="×"; remove.title=t("Remove track"); remove.setAttribute("aria-label",`${t("Remove track")} ${name}`);
+    remove.type="button"; remove.textContent="×"; remove.title=t("Remove track"); remove.setAttribute("aria-label", removeTrackLabel(name));
     remove.onclick=()=>removeBackgroundTrack(i); row.append(label,remove); manager.append(row);
   });
   if (clip) { select.value = clip.track || 0; document.getElementById("clipTransition").value = clip.transition || "cut"; }

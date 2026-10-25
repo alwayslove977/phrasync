@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import math
+import os
 import subprocess
-import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,12 +12,13 @@ import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 from . import kinetic
-from .processes import background_flags
+from .config import discard, scratch_dir
+from .processes import background_flags, track
 from .media import audio_envelope, decode_audio_frame, ffmpeg_exe, probe_duration
 from .storage import Asset, get_asset, get_av_asset
 from .render_backgrounds import DynamicBackground
 from .render_typography import render_text_layer
-from .render_utils import apply_dim, cover, scale_for_canvas
+from .render_utils import apply_dim, cover, install_output, scale_for_canvas
 from .subtitles import normalize_cues
 from .webgl_renderer import render_webgl_video
 from .encoding import rate_control_args
@@ -49,7 +50,10 @@ class VideoFrameSource:
             f"scale={width}:{height}:force_original_aspect_ratio=increase,"
             f"crop={width}:{height},fps={fps}"
         )
-        self.stderr = tempfile.TemporaryFile()
+        # A named log instead of an anonymous temporary file: opening one unlinks
+        # it immediately, which locked-down accounts refuse.
+        self.stderr = open(scratch_dir() / f"phrasync-decoder-{os.getpid()}-{int(time.monotonic() * 1e6)}.log",
+                           "w+b")
         self.process = subprocess.Popen(
             [
                 ffmpeg_exe(),
@@ -281,7 +285,7 @@ def render_project(
     ctx = _build_context(project, progress)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = output_path.with_suffix(".partial.mp4")
-    temporary.unlink(missing_ok=True)
+    discard(temporary)
 
     background = project.get("background") or {}
     exact_webgl = (
@@ -328,14 +332,14 @@ def render_project(
             completed = subprocess.run(command, capture_output=True, text=True, creationflags=background_flags())
             if completed.returncode != 0:
                 raise RuntimeError(f"FFmpeg WebGL mux failed: {completed.stderr.strip() or 'unknown error'}")
-            temporary.replace(output_path)
+            install_output(temporary, output_path)
             if progress:
                 progress(1.0, "Render complete")
         except Exception:
-            temporary.unlink(missing_ok=True)
+            discard(temporary)
             raise
         finally:
-            encoded.unlink(missing_ok=True)
+            discard(encoded)
         return {
             "path": str(output_path), "duration": ctx.duration, "frames": ctx.frame_count,
             "width": ctx.width, "height": ctx.height, "fps": ctx.fps,
@@ -386,7 +390,7 @@ def render_project(
             str(temporary),
         ]
     )
-    encoder = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, creationflags=background_flags())
+    encoder = track(subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, creationflags=background_flags()))
     assert encoder.stdin is not None
     try:
         for frame_index in range(ctx.frame_count):
@@ -401,7 +405,7 @@ def render_project(
         return_code = encoder.wait()
         if return_code != 0:
             raise RuntimeError(f"FFmpeg export failed: {stderr.strip() or 'unknown error'}")
-        temporary.replace(output_path)
+        install_output(temporary, output_path)
         if progress:
             progress(1.0, "Render complete")
     except Exception:
@@ -415,7 +419,7 @@ def render_project(
         if encoder.stderr:
             encoder.stderr.close()
         composer.close()
-        temporary.unlink(missing_ok=True)
+        discard(temporary)
         raise
     finally:
         composer.close()

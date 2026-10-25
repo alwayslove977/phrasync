@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from . import kinetic
-from .font_utils import load_font, load_font_for_text
+from .font_utils import load_font, load_font_for_text, resolve_custom_font_path
 from .render_utils import clamp, hex_color, scale_for_canvas
 
 if TYPE_CHECKING:
@@ -263,7 +263,11 @@ def render_text_layer(ctx: RenderContext, t: float) -> Image.Image | None:
         return None
 
     font_preset = style.get("fontPreset", "impact")
-    font_path = Path(ctx.font_asset.path) if ctx.font_asset else None
+    font_path = (
+        Path(ctx.font_asset.path)
+        if ctx.font_asset
+        else resolve_custom_font_path(style.get("fontPath"))
+    )
     base_size = max(18, int(scale_for_canvas(float(style.get("fontSize", 160)), ctx.height, ctx.width)))
     if spec.layout == "focus":
         base_size = int(base_size * 1.34)

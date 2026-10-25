@@ -3,16 +3,6 @@
 // Library assets are separate from clip instances: importing never changes the edit.
 const mediaImports = new Map();
 let mediaBinSignature = "";
-Object.assign(ITALIAN, {
-  "Media bin": "Libreria media", "Drag media here": "Trascina qui i media",
-  "Import into the media bin, then drag a file onto the background timeline.": "Importa nella libreria, poi trascina un file sulla timeline di sfondo.",
-  "Ready. Drag media onto the timeline.": "Pronto. Trascina i media sulla timeline.",
-  "Add at playhead": "Aggiungi al cursore", "Remove from bin": "Rimuovi dalla libreria",
-  "Drop images or videos here": "Rilascia qui immagini o video",
-  "Preparing video…": "Preparazione video…", "Checking media…": "Verifica del file…",
-  "This media is used on the timeline. Remove its clips first; original files are kept.": "Questo media è sulla timeline. Rimuovi prima i suoi clip; i file originali vengono conservati."
-});
-
 function libraryAssets() {
   const bg = project.background, library = bg.mediaLibrary ||= [];
   // Older local projects keep their footage and gain a reusable media bin.

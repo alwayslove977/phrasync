@@ -1,9 +1,11 @@
 """Bounded-memory frequency bands for the offline overlay, not fake amplitude bars."""
 from __future__ import annotations
 
+import os
 import subprocess
-import tempfile
+import time
 import numpy as np
+from .config import discard, scratch_dir
 from .media import ffmpeg_exe
 from .processes import background_flags
 
@@ -14,7 +16,9 @@ class SpectrumSource:
         self.position = 0
         self.window = np.zeros(2048, dtype=np.float32)
         self.hann = np.hanning(2048).astype(np.float32)
-        self.errors = tempfile.TemporaryFile()
+        # Named log instead of TemporaryFile, which unlinks on open.
+        self.error_log = scratch_dir() / f"phrasync-spectrum-{os.getpid()}-{int(time.monotonic() * 1e6)}.log"
+        self.errors = open(self.error_log, "w+b")
         self.process = subprocess.Popen([
             ffmpeg_exe(), "-v", "error", "-ss", str(start_time), "-i", path, "-vn", "-ac", "1", "-ar", "8000",
             "-f", "f32le", "pipe:1"], stdout=subprocess.PIPE, stderr=self.errors, creationflags=background_flags())
@@ -46,3 +50,4 @@ class SpectrumSource:
         except subprocess.TimeoutExpired:
             self.process.kill(); self.process.wait(timeout=5)
         self.errors.close()
+        discard(self.error_log)

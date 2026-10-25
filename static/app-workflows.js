@@ -210,9 +210,9 @@ async function transcribeSong() {
   els.cancelTranscription.hidden = false;
   els.transcriptionProgress.hidden = false;
   updateTranscriptionProgress({ progress: 0, message: "Creating transcription job" });
-  setAssetStatus(document.documentElement.lang === "it"
-    ? "Whisper preparerà la trascrizione e i tempi. Al primo utilizzo, il download del modello mostrerà percentuale e tempo rimanente."
-    : `Whisper is preparing the ${project.sourceKind === "video" ? "video" : "audio"} transcription and timing. The first model download will show progress and estimated time remaining.`);
+  setAssetStatus(t(project.sourceKind === "video"
+    ? "Whisper is preparing the video transcription and timing. The first model download will show progress and estimated time remaining."
+    : "Whisper is preparing the audio transcription and timing. The first model download will show progress and estimated time remaining."));
   try {
     const job = await api("/api/transcriptions", {
       method: "POST",
@@ -300,6 +300,21 @@ async function runCritic() {
   }
 }
 
+/* The health note is one sentence assembled from three dictionary entries, so
+ * the finished string is neither a key nor a pattern. Both renderings are built
+ * on every call and the pair is registered in the same pass: switching language
+ * then works from the record alone, with no second /api/health round trip —
+ * which may never come, because the failing branch below leaves the note as it
+ * is. */
+function whisperStatusNote(gpuReady) {
+  const mode = gpuReady ? "NVIDIA CUDA acceleration active" : "CPU mode";
+  const tail = "The first transcription downloads the model with progress and estimated time remaining.";
+  const english = `Local Whisper ready · ${mode}. ${tail}`;
+  const chinese = `${t("Local Whisper ready", "zh-CN")} · ${t(mode, "zh-CN")}. ${t(tail, "zh-CN")}`;
+  rememberSource(chinese, english, "zh-CN");
+  return currentLanguage === "zh-CN" ? chinese : english;
+}
+
 async function checkHealth() {
   try {
     health = await api("/api/health");
@@ -309,14 +324,10 @@ async function checkHealth() {
     $("span", els.engineStatus).textContent = t(coreOk ? "Local engine ready" : "FFmpeg missing");
     if (health.transcription.available) {
       const gpuReady = Boolean(health.transcription.cuda);
-      els.transcriptionNote.textContent = document.documentElement.lang === "it"
-        ? `Whisper locale pronto · ${gpuReady ? "accelerazione NVIDIA CUDA attiva" : "modalità CPU"}. La prima trascrizione scarica il modello mostrando avanzamento e tempo stimato.`
-        : `Local Whisper ready · ${gpuReady ? "NVIDIA CUDA acceleration active" : "CPU mode"}. The first transcription downloads the model with progress and estimated time remaining.`;
+      els.transcriptionNote.textContent = whisperStatusNote(gpuReady);
       els.engineStatus.title = health.transcription.gpu?.reason || t("Local engine status");
     } else {
-      els.transcriptionNote.textContent = document.documentElement.lang === "it"
-        ? "Componenti AI non installati. Reinstalla Phrasync o esegui lo script install_ai, quindi riavvia."
-        : "AI pack not installed. Reinstall Phrasync or run the install_ai script, then restart.";
+      els.transcriptionNote.textContent = t("AI pack not installed. Reinstall Phrasync or run the install_ai script, then restart.");
     }
     if (!health.ocr.available) setAssetStatus("OCR engine not installed. Run the AI installer to enable it.", "error");
   } catch (error) {

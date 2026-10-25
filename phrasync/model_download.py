@@ -55,6 +55,30 @@ def model_is_ready(path: Path) -> bool:
     return (path / "config.json").is_file() and (path / "model.bin").is_file()
 
 
+def bundled_model(root: Path, model_name: str) -> Path | None:
+    """Find a model shipped inside the application bundle.
+
+    The folder inside the bundle can be named after the short alias (``tiny``),
+    after the Hugging Face repository (``Systran--faster-whisper-tiny``) or with
+    a ``whisper-`` prefix, so all of those are probed before giving up and
+    falling back to a download.
+    """
+    name = (model_name or "").strip()
+    if not name:
+        return None
+    repository = MODEL_REPOSITORIES.get(name, name)
+    candidates = [name, repository, f"whisper-{name}"]
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        folder = model_path(root, candidate)
+        if model_is_ready(folder):
+            return folder
+    return None
+
+
 def downloaded_bytes(path: Path) -> int:
     """Return payload file sizes for cache diagnostics, not transfer progress.
 
@@ -166,8 +190,25 @@ def ensure_model(
     *,
     progress: Callable[..., None] | None = None,
     cancel_check: Callable[[], bool] | None = None,
+    bundled_root: Path | None = None,
 ) -> Path:
-    """Download a model once while reporting bytes, percentage, speed and ETA."""
+    """Download a model once while reporting bytes, percentage, speed and ETA.
+
+    A model that ships inside the application bundle is used in place, so the
+    packaged app can transcribe offline without touching the network.
+    """
+    if bundled_root is not None:
+        bundled = bundled_model(bundled_root, model_name)
+        if bundled is not None:
+            if progress:
+                progress(0.13, f"Loading bundled Whisper {model_name}…", {
+                    "phase": "model-load",
+                    "downloadedBytes": downloaded_bytes(bundled),
+                    "totalBytes": downloaded_bytes(bundled),
+                    "etaSeconds": None,
+                })
+            return bundled
+
     target = model_path(root, model_name)
     if model_is_ready(target):
         return target

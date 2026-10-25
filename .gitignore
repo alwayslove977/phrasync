@@ -58,3 +58,48 @@ token.json
 *.key
 *.p12
 *.pfx
+
+# macOS packaging build environment
+.venv-build/
+.venv-build-ai/
+
+# Local edits, experiments and one-off backups. The maintained macOS branch does
+# not publish these: they duplicate source files that are already tracked.
+*.bak
+*.font-backup
+*.before_*.bak
+backup_*/
+
+# User-supplied fonts. From source this folder is the writable custom-font
+# directory, so it holds personal font files rather than project assets; two of
+# the fonts used locally have no redistribution grant.
+/fonts/
+
+# Build inputs that are downloaded rather than committed.
+#   assets/browser/  chrome-headless-shell (~195 MB, Chrome for Testing branding;
+#                    obtain with: playwright install chromium-headless-shell)
+#   assets/models/   faster-whisper models (~75 MB for `tiny`; the app downloads
+#                    them on demand, and packaging/macos/README.md documents the
+#                    exact revision used for the macOS bundle)
+# Both are required by packaging/macos/build_app.sh, which reports them missing
+# instead of failing silently, and both ship inside the macOS release artifact.
+/assets/browser/
+/assets/models/
+!packaging/macos/Phrasync.spec
+
+# 4-byte "blat" stubs that the bundler drops into the repo root. They carry no
+# content and are not part of the project. Each rule is root-anchored and names
+# one file exactly, so no normal file can be caught by accident.
+/3r2s8pdh
+/4p39d7et
+/5kqhrgtw
+/_5ud9y2_
+/cy65jxnp
+/mozy_4ol
+/qeuy6fsy
+/t0hrb7tu
+/uuksrh0e
+/xr6rk0s0
+/xuc2yojc
+/yaaznfb3
+/yxjef9ut

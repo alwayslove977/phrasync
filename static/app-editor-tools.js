@@ -1,16 +1,5 @@
 "use strict";
 
-Object.assign(ITALIAN, {
-  "File": "File", "New project": "Nuovo progetto", "Version": "Versione",
-  "Settings & about": "Impostazioni e informazioni", "Created by": "Creato da",
-  "Website": "Sito web", "Developer links": "Contatti sviluppatore",
-  "Create a new project? Save your current project first to keep it.": "Creare un nuovo progetto? Salva prima quello attuale per conservarlo.",
-  "Local lyric-video and subtitle studio. Transcription, editing and rendering run on your computer.": "Studio locale per lyric video e sottotitoli. Trascrizione, montaggio e rendering avvengono sul tuo computer.",
-  "Optional support via Buy Me a Coffee. No features are locked behind payment. Microsoft is not the fundraiser or sponsor.": "Supporto facoltativo tramite Buy Me a Coffee. Nessuna funzione richiede pagamenti. Microsoft non è il promotore o sponsor.",
-  "Edit clip": "Modifica clip", "Split here": "Dividi qui", "Move to playhead": "Sposta al cursore",
-  "Reset pan & zoom": "Reimposta pan e zoom", "Speed": "Velocità", "Zoom": "Zoom"
-});
-
 function initEditorTools() {
   const fileMenu = document.getElementById("projectMenu");
   fileMenu.addEventListener("click", event => { if (event.target.closest("button")) fileMenu.open = false; });

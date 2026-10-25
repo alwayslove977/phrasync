@@ -93,7 +93,8 @@ function updatePresetPresentation() {
   els.text3dOffsetControls.hidden = !sceneText;
   const positionLabel = els.positionY.closest("label")?.querySelector("span");
   if (positionLabel?.firstChild) {
-    positionLabel.firstChild.nodeValue = sceneText ? "Ground anchored " : "Vertical position ";
+    const source = sceneText ? "Ground anchored " : "Vertical position ";
+    positionLabel.firstChild.nodeValue = typeof t === "function" ? t(source) : source;
   }
   els.positionY.title = sceneText
     ? "3D typography is planted on the world floor. Switch to Flat text for screen positioning."

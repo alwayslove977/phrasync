@@ -1,5 +1,4 @@
 "use strict";
-Object.assign(ITALIAN, {"Set IN (I)":"Imposta IN (I)","Set OUT (O)":"Imposta OUT (O)","Full timeline":"Timeline completa","Custom":"Personalizzata","Timeline":"Timeline","OUT must be after IN.":"OUT deve essere successivo a IN."});
 function refreshExportRange() {
   const duration=projectDuration(), range=project.exportRange;
   if (!document.getElementById("exportIn")) return;
