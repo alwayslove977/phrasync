@@ -524,7 +524,7 @@ window.PHRASYNC_I18N = {
     "World regenerated.": "场景已重新生成。",
     "MP4 render complete.": "MP4 导出完成。",
     "OCR text added to the lyric box.": "OCR 文字已添加到歌词框。",
-    "OCR engine not installed. Run the AI installer to enable it.": "未安装 OCR 引擎。运行 AI 组件安装程序即可启用。",
+    "OCR unavailable": "OCR 不可用",
     "Hugging Face token saved locally.": "Hugging Face 令牌已保存到本地。",
     "Saved Hugging Face token removed.": "已删除保存的 Hugging Face 令牌。",
     "Remove the saved Hugging Face token from this computer?": "要从本机删除保存的 Hugging Face 令牌吗？",

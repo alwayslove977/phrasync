@@ -315,6 +315,13 @@ function whisperStatusNote(gpuReady) {
   return currentLanguage === "zh-CN" ? chinese : english;
 }
 
+/* The backend answers *why* OCR is off with one long sentence — a missing wheel,
+ * or the dylib macOS refused to load — so it goes to the tooltip and the
+ * diagnostics log while the status line keeps a short, translated label. */
+function ocrDiagnostic(reason) {
+  return typeof reason === "string" ? reason.trim() : "";
+}
+
 async function checkHealth() {
   try {
     health = await api("/api/health");
@@ -329,7 +336,11 @@ async function checkHealth() {
     } else {
       els.transcriptionNote.textContent = t("AI pack not installed. Reinstall Phrasync or run the install_ai script, then restart.");
     }
-    if (!health.ocr.available) setAssetStatus(health.ocr.reason || "OCR engine not installed. Run the AI installer to enable it.", "error");
+    if (health.ocr && !health.ocr.available) {
+      const reason = ocrDiagnostic(health.ocr.reason);
+      setAssetStatus(t("OCR unavailable"), "error", reason);
+      if (reason) window.PhrasyncDiagnostics?.record("warning", "ocr", reason);
+    }
   } catch (error) {
     els.engineStatus.classList.add("error");
     $("span", els.engineStatus).textContent = "Backend offline";

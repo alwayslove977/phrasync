@@ -63,3 +63,8 @@ def test_assembled_sentences_switch_from_english_without_a_refetch():
 def test_translation_order_is_dictionary_pattern_then_registered():
     """Dictionary, then pattern rules, then registered assembled text, then raw."""
     run_group("priority")
+
+
+def test_ocr_status_line_stays_short_and_keeps_the_reason_in_the_tooltip():
+    """A dyld-sized reason belongs in the tooltip, not on the status line."""
+    run_group("ocr-status")

@@ -5,7 +5,7 @@
 // in the browser. That makes the boundary between i18n.js and i18n-dom.js
 // testable rather than merely asserted in prose.
 //
-// Usage: node tests/i18n_ui.cjs [exports|language|dom-state|observer|structure|assembled|bidirectional|priority]
+// Usage: node tests/i18n_ui.cjs [exports|language|dom-state|observer|structure|assembled|bidirectional|priority|ocr-status]
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -822,6 +822,137 @@ groups.priority = () => {
     assert.equal(api.translateAttributeText(lyric), lyric, 'and so is an attribute carrying it');
     api.rememberSource(lyric, 'First chorus', 'zh-CN');
     assert.equal(api.t('First chorus'), 'First chorus', 'a registered pair does not make t() translate content');
+  }
+};
+
+/* The status line under the asset list is one short sentence. The backend
+ * explains *why* OCR is off in a sentence that reaches hundreds of characters
+ * once it quotes the dyld failure, so that text belongs in the tooltip and the
+ * diagnostics log instead. These checks drive the real setAssetStatus() and the
+ * real checkHealth(), not a stub of either. */
+const OCR_REASON =
+  'RapidOCR is installed but could not load (ImportError: dlopen(/Applications/Phrasync.app/'
+  + 'Contents/Frameworks/libonnxruntime.1.23.2.dylib, 0x0006): Library not loaded: '
+  + '@rpath/libonnxruntime.1.23.2.dylib, referenced from librapidocr.dylib). It needs macOS '
+  + '13.4 or later for ONNX Runtime; Phrasync\'s other features run on 12.0, so only OCR is '
+  + 'unavailable on this system. Install Tesseract (brew install tesseract) for OCR here.';
+
+groups['ocr-status'] = async () => {
+  /* `ocr: undefined` leaves the field out of the payload entirely, the way an
+   * older backend would answer. */
+  const build = ({ language = 'zh-CN', ocr } = {}) => {
+    const page = createHarness({ stored: language });
+    page.loadDictionary();
+    page.loadEngine();
+    page.loadDom();
+    const api = page.api();
+    api.initI18n();
+
+    const status = page.mount('div', 'assetStatus');
+    const note = page.mount('p', 'transcriptionNote');
+    const engineStatus = page.mount('span', 'engineStatus');
+    const toastStack = makeEl('div');
+    const recorded = [];
+    const payload = {
+      ffmpeg: { available: true },
+      transcription: { available: true, cuda: false, gpu: { reason: null } },
+      ...(ocr === undefined ? {} : { ocr })
+    };
+
+    page.setGlobal('els', {
+      assetStatus: status,
+      transcriptionNote: note,
+      engineStatus,
+      toastStack,
+      // app-ui.js is loaded whole, so the elements its other entry points reach
+      // for must exist even though this group never calls them.
+      ocrPick: makeEl('button'),
+      ocrInput: makeEl('input'),
+      bulkLyrics: makeEl('textarea')
+    });
+    page.setGlobal('$', () => makeEl('span'));
+    page.setGlobal('health', null);
+    page.setGlobal('setTimeout', () => 0);
+    page.setGlobal('PhrasyncDiagnostics', { record: (...args) => recorded.push(args) });
+
+    // app-ui.js first: it owns the real setAssetStatus() and toast(). Its own
+    // api() is replaced afterwards, so /api/health is answered by the payload
+    // above and never reaches fetch().
+    page.loadScript('app-ui.js');
+    page.setGlobal('api', async () => payload);
+    page.loadScript('app-workflows.js');
+    return { page, status, note, toastStack, recorded };
+  };
+
+  /* ---- unavailable, with the long reason the backend really sends ---- */
+  {
+    const { page, status, note, toastStack, recorded } = build({ ocr: { available: false, reason: OCR_REASON } });
+    await page.run('checkHealth()');
+
+    assert.equal(status.textContent, 'OCR 不可用', 'the status line carries the short translated label');
+    assert.ok(OCR_REASON.length > 300, 'the guard is only meaningful with a long reason');
+    assert.ok(status.textContent.length < 20, `the status line stays short (${status.textContent.length} chars)`);
+    assert.equal(status.title, OCR_REASON, 'the whole reason survives in the tooltip');
+    assert.equal(status.className, 'inline-status error', 'it is still an error, so the colour is unchanged');
+    assert.equal(status.hidden, false, 'the line is visible');
+    assert.deepEqual(recorded, [['warning', 'ocr', OCR_REASON]], 'the reason reaches the diagnostics log');
+    assert.equal(toastStack.children.length, 0, 'start-up does not toast the long reason');
+    assert.equal(note.textContent, NOTE_ZH, 'the rest of the health check is unaffected');
+  }
+
+  /* ---- the same page in English ---- */
+  {
+    const { page, status } = build({ language: 'en', ocr: { available: false, reason: OCR_REASON } });
+    await page.run('checkHealth()');
+    assert.equal(status.textContent, 'OCR unavailable', 'English shows the English label');
+    assert.equal(status.title, OCR_REASON, 'and keeps the same tooltip');
+  }
+
+  /* ---- a missing, empty or non-string reason must not throw or invent text ---- */
+  {
+    const cases = [
+      ['missing', undefined],
+      ['empty', ''],
+      ['blank', '   '],
+      ['null', null],
+      ['number', 500],
+      ['object', { message: 'boom' }],
+      ['array', ['a']]
+    ];
+    for (const [label, reason] of cases) {
+      const { page, status, recorded } = build({ ocr: { available: false, reason } });
+      await page.run('checkHealth()');
+      assert.equal(status.textContent, 'OCR 不可用', `${label}: the label still renders`);
+      assert.equal(status.title, '', `${label}: nothing is invented for the tooltip`);
+      assert.deepEqual(recorded, [], `${label}: nothing is logged without a reason`);
+    }
+  }
+
+  /* ---- OCR available: the status line is left alone ---- */
+  {
+    const { page, status, note, recorded } = build({ ocr: { available: true, reason: '' } });
+    await page.run('checkHealth()');
+    assert.equal(status.textContent, '', 'a working OCR engine writes nothing to the status line');
+    assert.notEqual(status.hidden, false, 'and does not reveal it');
+    assert.deepEqual(recorded, [], 'nothing is logged');
+    assert.equal(note.textContent, NOTE_ZH, 'the ready note is unchanged');
+  }
+
+  /* ---- a payload without the field is not reported as unavailable ---- */
+  {
+    const { page, status } = build();
+    await page.run('checkHealth()');
+    assert.equal(status.textContent, '', 'an older backend without health.ocr is left alone');
+  }
+
+  /* ---- the reason does not outlive the failure it described ---- */
+  {
+    const { page, status } = build({ ocr: { available: false, reason: OCR_REASON } });
+    await page.run('checkHealth()');
+    assert.equal(status.title, OCR_REASON, 'the tooltip is set while OCR is unavailable');
+    page.run('setAssetStatus("项目已保存", "success")');
+    assert.equal(status.textContent, '项目已保存', 'the next status message replaces the label');
+    assert.equal(status.title, '', 'and the stale reason is cleared with it');
   }
 };
 

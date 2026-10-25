@@ -51,10 +51,14 @@ async function uploadAsset(kind, file, onProgress = null) {
   });
 }
 
-function setAssetStatus(message, type = "") {
+/* `detail` is the long explanation behind a failure — a backend message, a dyld
+ * error — and belongs in the tooltip, not on the status line. It is written on
+ * every call, so a reason cannot outlive the failure that produced it. */
+function setAssetStatus(message, type = "", detail = "") {
   els.assetStatus.hidden = !message;
   els.assetStatus.className = `inline-status ${type}`;
   els.assetStatus.textContent = message;
+  els.assetStatus.title = detail || "";
 }
 
 function scheduleSave() {
