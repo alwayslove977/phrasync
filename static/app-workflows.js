@@ -329,7 +329,7 @@ async function checkHealth() {
     } else {
       els.transcriptionNote.textContent = t("AI pack not installed. Reinstall Phrasync or run the install_ai script, then restart.");
     }
-    if (!health.ocr.available) setAssetStatus("OCR engine not installed. Run the AI installer to enable it.", "error");
+    if (!health.ocr.available) setAssetStatus(health.ocr.reason || "OCR engine not installed. Run the AI installer to enable it.", "error");
   } catch (error) {
     els.engineStatus.classList.add("error");
     $("span", els.engineStatus).textContent = "Backend offline";

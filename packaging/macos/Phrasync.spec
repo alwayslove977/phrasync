@@ -28,6 +28,27 @@ with (ROOT / "pyproject.toml").open("rb") as handle:
 APP_NAME = "Phrasync"
 BUNDLE_ID = "com.phrasync.desktop"
 
+# The floor this bundle declares is measured from the Mach-O load commands of the
+# 0.4.7 app (table in packaging/macos/README.md): 371 files require 12.0 (``av``,
+# numpy and most extension modules) and four ONNX Runtime objects require 13.4.
+# dyld refuses to load a library whose minimum is newer than the running system,
+# so a system below 12.0 cannot import the core modules at all -- which is what
+# the old, unconditional 11.0 value pretended it could.
+#
+# 13.4 belongs to ONNX Runtime alone, and the only code that imports it is
+# ``phrasync/ocr.py``: the import is lazy, wrapped in ``except Exception``, and
+# falls back to Tesseract before raising ``OCRUnavailable``. Declaring 13.4 for
+# the whole bundle therefore costs every 12.0-13.3 machine an app that would run
+# fine apart from OCR. The declared floor stays at the non-OCR dependency floor
+# and OCR is documented -- and reported through ``/api/health`` -- as unavailable
+# below ``OCR_SYSTEM_VERSION`` instead.
+#
+# 12.0 is inferred from those load commands, not from a launch test on a 12.x
+# machine. Re-measure all three values when numpy/``av``/onnxruntime move.
+MIN_SYSTEM_VERSION_BASE = "12.0"
+MIN_SYSTEM_VERSION_AI = "12.0"
+OCR_SYSTEM_VERSION = "13.4"
+
 ICON = BUILD_DIR / "Phrasync.icns"
 
 datas = [
@@ -166,8 +187,14 @@ def missing_ai_packages(packages):
     return absent
 
 
+AI_ENABLED = os.environ.get("PHRASYNC_BUILD_AI", "1") == "1"
+
+# Both builds declare 12.0 today; the switch is kept explicit so a future change
+# to one side cannot silently move the other.
+MIN_SYSTEM_VERSION = MIN_SYSTEM_VERSION_AI if AI_ENABLED else MIN_SYSTEM_VERSION_BASE
+
 binaries = []
-if os.environ.get("PHRASYNC_BUILD_AI", "1") == "1":
+if AI_ENABLED:
     absent = missing_ai_packages(AI_PACKAGES)
     if absent:
         raise SystemExit(
@@ -295,7 +322,7 @@ app = BUNDLE(
         "CFBundleExecutable": APP_NAME,
         "CFBundleIconFile": ICON.name if ICON.exists() else "",
         "LSApplicationCategoryType": "public.app-category.video",
-        "LSMinimumSystemVersion": "11.0",
+        "LSMinimumSystemVersion": MIN_SYSTEM_VERSION,
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,
         "NSHumanReadableCopyright": "Apache-2.0",

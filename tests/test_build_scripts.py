@@ -21,12 +21,14 @@ import io
 import os
 import platform
 import posixpath
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
 import types
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -35,6 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BUILD_PY = ROOT / "packaging" / "macos" / "build_app.py"
 BUILD_SH = ROOT / "packaging" / "macos" / "build_app.sh"
 SPEC = ROOT / "packaging" / "macos" / "Phrasync.spec"
+INSTALL_WHEELS = ROOT / "packaging" / "macos" / "install_wheels.py"
 
 # Mirrors the path the shell driver reports for the arch it is building.
 BROWSER_ARCH = "arm64" if platform.machine() == "arm64" else "x64"
@@ -589,6 +592,11 @@ def _run_spec(monkeypatch, repo: Path, *, absent_ai: tuple[str, ...] = (),
             report["datas"] = list(args[2])
             super().__init__(*args, **kwargs)
 
+    class _Bundle(_Target):
+        def __init__(self, *args, **kwargs):
+            report["info_plist"] = dict(kwargs.get("info_plist") or {})
+            super().__init__(*args, **kwargs)
+
     namespace = {
         "SPECPATH": str(repo / "packaging" / "macos"),
         "__file__": str(repo / "packaging" / "macos" / "Phrasync.spec"),
@@ -597,7 +605,7 @@ def _run_spec(monkeypatch, repo: Path, *, absent_ai: tuple[str, ...] = (),
         "PYZ": _Target,
         "EXE": _Target,
         "COLLECT": _Collect,
-        "BUNDLE": _Target,
+        "BUNDLE": _Bundle,
     }
     exec(compile(SPEC.read_text(encoding="utf-8"), str(SPEC), "exec"), namespace)
     return report["datas"], namespace, report
@@ -839,6 +847,85 @@ def test_spec_skips_every_ai_check_when_the_pack_is_disabled(monkeypatch, worksp
     assert "assets/NotoSansJP-VF.ttf" in dests
 
 
+# ---------------------------------------------------------------------------
+# Info.plist must not promise a macOS the bundle cannot load
+#
+# 0.4.7 shipped with ``LSMinimumSystemVersion`` hard-coded to 11.0 while 371 of
+# its 550 Mach-O files needed 12.0 and the four ONNX Runtime objects needed 13.4.
+# dyld refuses a library newer than the running system, so the old value did not
+# widen support: it only let LaunchServices start an app that then failed to
+# import its own core modules.
+#
+# The declared floor is the non-OCR dependency floor (12.0). ONNX Runtime's 13.4
+# is reached only through ``phrasync/ocr.py``, whose import is lazy and whose
+# failure degrades to Tesseract before raising ``OCRUnavailable``, so declaring
+# 13.4 for the whole bundle would lock out systems that can run every feature
+# except OCR. That 13.4 is still recorded -- as ``OCR_SYSTEM_VERSION`` and as the
+# newest row of the measured table -- is what these tests keep honest.
+# ---------------------------------------------------------------------------
+
+MEASURED_TABLE = ROOT / "packaging" / "macos" / "README.md"
+
+
+def _declared_minimum(report: dict) -> str:
+    return report["info_plist"]["LSMinimumSystemVersion"]
+
+
+def _measured_minos(table_path: Path) -> list[str]:
+    """The ``minos`` column of the load-command table in the packaging README."""
+    floors = []
+    for line in table_path.read_text(encoding="utf-8").splitlines():
+        # Rows look like "  | 13.4 | 4 | `onnxruntime/...` |"; the "<= 10.16"
+        # row deliberately does not match, because a range is not a floor.
+        match = re.match(r"\s*\|\s*(\d+\.\d+)\s*\|\s*\d+\s*\|", line)
+        if match:
+            floors.append(match.group(1))
+    return floors
+
+
+def _newest(floors: list[str]) -> str:
+    return max(floors, key=lambda value: tuple(int(part) for part in value.split(".")))
+
+
+def test_spec_declares_the_floor_of_the_shipped_bundle(monkeypatch, workspace):
+    _datas, namespace, report = _run_spec(monkeypatch, _spec_repo(workspace))
+
+    # 12.0 is what the bundle's non-OCR natives require; the 13.4 objects are
+    # ONNX Runtime, reachable only through the lazily imported OCR module.
+    assert _declared_minimum(report) == "12.0"
+    assert _declared_minimum(report) != "11.0"
+    # The AI switch must not move the declared floor in either direction.
+    assert namespace["MIN_SYSTEM_VERSION_AI"] == "12.0"
+    assert namespace["MIN_SYSTEM_VERSION_BASE"] == "12.0"
+
+
+def test_spec_declares_the_lower_floor_when_the_ai_pack_is_off(monkeypatch, workspace):
+    _datas, _namespace, report = _run_spec(
+        monkeypatch, _spec_repo(workspace), with_ai=False, expect_no_probe=True
+    )
+
+    # Without ONNX Runtime the bundle carries nothing above 12.0, and claiming
+    # 13.4 there would lock out systems that can run every feature it has.
+    assert _declared_minimum(report) == "12.0"
+
+
+def test_ocr_floor_is_the_newest_requirement_in_the_measured_table(monkeypatch, workspace):
+    _datas, namespace, _report = _run_spec(monkeypatch, _spec_repo(workspace))
+
+    measured = _measured_minos(MEASURED_TABLE)
+    assert measured, f"no minos table found in {MEASURED_TABLE}"
+    newest = _newest(measured)
+
+    # 13.4 is ONNX Runtime's floor. It is no longer declared bundle-wide, so it
+    # has to be pinned somewhere the build reads: OCR_SYSTEM_VERSION. If a future
+    # onnxruntime bump raises the table, this fails until the constant follows.
+    assert namespace["OCR_SYSTEM_VERSION"] == newest
+    # Everything else in the bundle tops out at 12.0, which is what gets declared.
+    assert namespace["MIN_SYSTEM_VERSION_AI"] == _newest(
+        [value for value in measured if value != newest]
+    )
+
+
 def test_disabled_pack_tripwire_rejects_any_ai_collection(monkeypatch, workspace):
     """The --no-ai test above is only meaningful if the tripwire really fires.
 
@@ -862,4 +949,205 @@ def test_spec_presence_check_uses_real_import_resolution(monkeypatch, workspace)
     assert missing_ai_packages(["json", "pathlib"]) == []
     absent = "phrasync_ai_package_that_is_not_installed"
     assert missing_ai_packages(["json", absent]) == [absent]
+
+
+# ---------------------------------------------------------------------------
+# The wheel extractor must never write outside site-packages
+#
+# A wheel is an untrusted archive: member names come from whoever built it. The
+# extractor used to join them straight onto site-packages, and ``Path.__truediv__``
+# replaces the left side for an absolute name, so ``/x`` and ``../x`` both escaped.
+# These tests pin the refusal for every shape of escape, and pin the ordinary
+# extraction that has to keep working.
+# ---------------------------------------------------------------------------
+
+
+def load_install_wheels() -> types.ModuleType:
+    """Load the extractor without importing it, so no __pycache__ lands in packaging/."""
+    module = types.ModuleType("phrasync_install_wheels")
+    module.__file__ = str(INSTALL_WHEELS)
+    source = INSTALL_WHEELS.read_text(encoding="utf-8")
+    exec(compile(source, str(INSTALL_WHEELS), "exec"), module.__dict__)
+    return module
+
+
+def make_wheel(path: Path, members: dict[str, bytes]) -> Path:
+    """A zip with exactly these members; extraction needs no wheel metadata."""
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, payload in members.items():
+            archive.writestr(zipfile.ZipInfo(name), payload)
+    return path
+
+
+def make_site(workspace: Path) -> Path:
+    site = (workspace / "venv" / "lib"
+            / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages")
+    site.mkdir(parents=True)
+    return site
+
+
+def test_install_wheels_extracts_regular_members(workspace):
+    module = load_install_wheels()
+    site = make_site(workspace)
+    wheel = make_wheel(workspace / "demo-1.0-py3-none-any.whl", {
+        "demo/__init__.py": b"VERSION = 1\n",
+        "demo/core/mod.py": b"import os\n",
+        "./demo/dotted.py": b"x = 1\n",
+        "demo-1.0.data/purelib/demo/extra.py": b"y = 2\n",
+        "demo-1.0.data/scripts/demo-cli": b"#!/bin/sh\n",
+    })
+
+    written = module.install(wheel, site)
+
+    assert written == 4
+    assert (site / "demo" / "__init__.py").read_bytes() == b"VERSION = 1\n"
+    assert (site / "demo" / "core" / "mod.py").read_bytes() == b"import os\n"
+    # A leading "./" is normal in older wheels and must still land correctly.
+    assert (site / "demo" / "dotted.py").read_bytes() == b"x = 1\n"
+    # .data/purelib is remapped onto site-packages; .data/scripts is not importable.
+    assert (site / "demo" / "extra.py").read_bytes() == b"y = 2\n"
+    assert not (site / "demo-cli").exists()
+
+
+def test_install_wheels_refuses_parent_traversal(workspace):
+    module = load_install_wheels()
+    site = make_site(workspace)
+    wheel = make_wheel(workspace / "evil-1.0-py3-none-any.whl", {"../escaped.py": b"pwned\n"})
+
+    with pytest.raises(module.UnsafeWheelMember) as excinfo:
+        module.install(wheel, site)
+
+    message = str(excinfo.value)
+    assert "evil-1.0-py3-none-any.whl" in message
+    assert "../escaped.py" in message
+    assert not (workspace / "venv" / "lib" / "escaped.py").exists()
+    assert not (site.parent.parent / "escaped.py").exists()
+    # Nothing was written at all: the archive is refused before its first file.
+    assert list(site.rglob("*")) == []
+
+
+def test_install_wheels_refuses_absolute_member(workspace):
+    module = load_install_wheels()
+    site = make_site(workspace)
+    outside = workspace / "absolute-target.py"
+    wheel = make_wheel(workspace / "evil-1.0-py3-none-any.whl", {str(outside): b"pwned\n"})
+
+    with pytest.raises(module.UnsafeWheelMember) as excinfo:
+        module.install(wheel, site)
+
+    # The name of the temp file below also contains "absolute", so match the
+    # diagnosis rather than the substring: otherwise removing the check passes.
+    assert "absolute member path" in str(excinfo.value)
+    assert not outside.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="creating a symlink needs a privilege on Windows")
+def test_install_wheels_refuses_members_that_leave_through_a_symlink(workspace):
+    module = load_install_wheels()
+    site = make_site(workspace)
+    outside = workspace / "elsewhere"
+    outside.mkdir()
+    # A name can look perfectly relative and still resolve outside if a directory
+    # inside site-packages is a symlink. Only the resolved-path check catches that.
+    (site / "shared").symlink_to(outside, target_is_directory=True)
+    wheel = make_wheel(workspace / "evil-1.0-py3-none-any.whl", {"shared/escaped.py": b"pwned\n"})
+
+    with pytest.raises(module.UnsafeWheelMember) as excinfo:
+        module.install(wheel, site)
+
+    assert "outside" in str(excinfo.value)
+    assert not (outside / "escaped.py").exists()
+
+
+def test_install_wheels_refuses_nested_traversal(workspace):
+    module = load_install_wheels()
+    site = make_site(workspace)
+    wheel = make_wheel(workspace / "evil-1.0-py3-none-any.whl", {"pkg/../../escaped.py": b"pwned\n"})
+
+    with pytest.raises(module.UnsafeWheelMember) as excinfo:
+        module.install(wheel, site)
+
+    assert "escapes the target directory" in str(excinfo.value)
+    assert not (workspace / "venv" / "lib" / "escaped.py").exists()
+
+
+def test_install_wheels_refuses_traversal_hidden_in_a_data_dir(workspace):
+    module = load_install_wheels()
+    site = make_site(workspace)
+    # The .data/purelib prefix is stripped before the join, so the walk upwards
+    # starts from site-packages, not from the archive root.
+    member = "demo-1.0.data/purelib/../../../escaped.py"
+    wheel = make_wheel(workspace / "evil-1.0-py3-none-any.whl", {member: b"pwned\n"})
+
+    with pytest.raises(module.UnsafeWheelMember) as excinfo:
+        module.install(wheel, site)
+
+    assert "escapes the target directory" in str(excinfo.value)
+    assert not (workspace / "venv" / "escaped.py").exists()
+
+
+@pytest.mark.parametrize("name", [
+    "../x.py",
+    "/x.py",
+    "a/../../x.py",
+    "a\\..\\x.py",
+    "nul\x00byte.py",
+])
+def test_install_wheels_safe_relative_refuses_unsafe_names(name):
+    module = load_install_wheels()
+    with pytest.raises(module.UnsafeWheelMember):
+        module.safe_relative(name)
+
+
+@pytest.mark.parametrize(("name", "expected"), [
+    ("./a/b.py", "a/b.py"),
+    ("a//b.py", "a/b.py"),
+    ("a/./b.py", "a/b.py"),
+    ("", None),
+    (".", None),
+])
+def test_install_wheels_safe_relative_keeps_ordinary_names(name, expected):
+    module = load_install_wheels()
+    assert module.safe_relative(name) == expected
+
+
+def test_install_wheels_main_stops_and_reports_the_unsafe_archive(monkeypatch, workspace):
+    module = load_install_wheels()
+    site = make_site(workspace)
+    wheels = workspace / "wheels"
+    wheels.mkdir()
+    make_wheel(wheels / "aaa-good-1.0-py3-none-any.whl", {"good/__init__.py": b"ok\n"})
+    make_wheel(wheels / "zzz-evil-1.0-py3-none-any.whl", {"../../../escaped.py": b"pwned\n"})
+    monkeypatch.setattr(sys, "argv", ["install_wheels.py", str(wheels), str(site.parents[2])])
+
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = module.main()
+
+    assert code == 3
+    assert "zzz-evil-1.0-py3-none-any.whl" in err.getvalue()
+    assert "escaped.py" in err.getvalue()
+    assert not (workspace / "escaped.py").exists()
+    assert not (site.parent / "escaped.py").exists()
+    # The safe wheel sorted before the hostile one was extracted, then the run stopped.
+    assert (site / "good" / "__init__.py").exists()
+    assert "extracted" not in out.getvalue()
+
+
+def test_install_wheels_main_extracts_a_clean_set(monkeypatch, workspace):
+    module = load_install_wheels()
+    site = make_site(workspace)
+    wheels = workspace / "wheels"
+    wheels.mkdir()
+    make_wheel(wheels / "demo-1.0-py3-none-any.whl", {"demo/__init__.py": b"ok\n"})
+    monkeypatch.setattr(sys, "argv", ["install_wheels.py", str(wheels), str(site.parents[2])])
+
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = module.main()
+
+    assert code == 0
+    assert err.getvalue() == ""
+    assert (site / "demo" / "__init__.py").read_bytes() == b"ok\n"
+    assert "demo-1.0-py3-none-any.whl: 1 files" in out.getvalue()
 

@@ -1,36 +1,77 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import io
 import shutil
 import subprocess
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from .processes import background_flags
+
+# What ONNX Runtime -- and therefore RapidOCR -- requires from macOS. Every other
+# native dependency in the bundle loads on 12.0, so this value is the only reason
+# an OCR call can fail on a system where the app itself starts and runs.
+OCR_MIN_MACOS = "13.4"
 
 
 class OCRUnavailable(RuntimeError):
     pass
 
 
+def _describe(exc: BaseException) -> str:
+    """``TypeError: first line`` -- short enough for a toast, specific enough to
+    tell a missing package from a dylib the system refused to load."""
+    lines = str(exc).strip().splitlines()
+    return f"{type(exc).__name__}: {lines[0]}" if lines else type(exc).__name__
+
+
 @lru_cache(maxsize=1)
-def _rapid_engine():
+def _rapid_import_failure() -> str:
+    """Why ``import rapidocr_onnxruntime`` failed, or ``""`` when it worked.
+
+    Importing the package is what loads ONNX Runtime's dylibs, so on a macOS
+    older than ``OCR_MIN_MACOS`` it fails here with a dyld error before any OCR
+    code runs. Cached so ``/api/health`` does not retry a broken dlopen on every
+    poll; the outcome cannot change without a restart anyway.
+    """
+    try:
+        import rapidocr_onnxruntime  # noqa: F401
+    except Exception as exc:
+        return _describe(exc)
+    return ""
+
+
+def _rapid_installed() -> bool:
+    """Locate the package without importing it, to tell "absent" from "broken"."""
+    try:
+        return importlib.util.find_spec("rapidocr_onnxruntime") is not None
+    except (ImportError, ValueError):  # unresolvable, e.g. broken parent
+        return False
+
+
+@lru_cache(maxsize=1)
+def _rapid_engine() -> tuple[Any, str]:
+    """``(engine, failure)``; ``engine`` is None whenever OCR cannot run.
+
+    Building the engine loads three ONNX models, so this is cached and only ever
+    entered from a real OCR request -- never from a capability probe.
+    """
+    failure = _rapid_import_failure()
+    if failure:
+        return None, failure
     try:
         from rapidocr_onnxruntime import RapidOCR
 
-        return RapidOCR()
-    except Exception:
-        return None
+        return RapidOCR(), ""
+    except Exception as exc:
+        return None, _describe(exc)
 
 
 def rapidocr_available() -> bool:
-    try:
-        import rapidocr_onnxruntime  # noqa: F401
-
-        return True
-    except Exception:
-        return False
+    return not _rapid_import_failure()
 
 
 def tesseract_available() -> bool:
@@ -50,7 +91,7 @@ def _sort_lines(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _rapid_ocr(path: Path) -> dict[str, Any] | None:
-    engine = _rapid_engine()
+    engine, _failure = _rapid_engine()
     if engine is None:
         return None
     result, elapsed = engine(str(path))
@@ -130,6 +171,31 @@ def _tesseract_ocr(path: Path, language: str = "eng") -> dict[str, Any] | None:
     }
 
 
+def unavailable_reason() -> str:
+    """A sentence that names the cause it actually found.
+
+    "Install the AI pack" is the wrong advice when the pack is installed and the
+    system refused to load ONNX Runtime, which is what a macOS below
+    ``OCR_MIN_MACOS`` looks like from here.
+    """
+    failure = _rapid_import_failure()
+    if failure and _rapid_installed():
+        if sys.platform == "darwin":
+            return (
+                f"RapidOCR is installed but could not load ({failure}). It needs macOS "
+                f"{OCR_MIN_MACOS} or later for ONNX Runtime; Phrasync's other features run "
+                "on 12.0, so only OCR is unavailable on this system. "
+                "Install Tesseract (brew install tesseract) for OCR here."
+            )
+        return (
+            f"RapidOCR is installed but could not load ({failure}). "
+            "Reinstall it with the AI installer, or install Tesseract."
+        )
+    return (
+        "No OCR engine is available. Install requirements-ai.txt (RapidOCR) or Tesseract OCR."
+    )
+
+
 def ocr_image(path: Path, language: str = "auto") -> dict[str, Any]:
     rapid = _rapid_ocr(path)
     if rapid is not None:
@@ -137,14 +203,17 @@ def ocr_image(path: Path, language: str = "auto") -> dict[str, Any]:
     tesseract = _tesseract_ocr(path, language=language)
     if tesseract is not None:
         return tesseract
-    raise OCRUnavailable(
-        "No OCR engine is available. Install requirements-ai.txt (RapidOCR) or Tesseract OCR."
-    )
+    raise OCRUnavailable(unavailable_reason())
 
 
-def capability_status() -> dict[str, bool]:
+def capability_status() -> dict[str, Any]:
+    """Health payload. ``reason`` is empty whenever ``available`` is true."""
+    failure = _rapid_import_failure()
+    tesseract = tesseract_available()
+    available = not failure or tesseract
     return {
-        "rapidocr": rapidocr_available(),
-        "tesseract": tesseract_available(),
-        "available": rapidocr_available() or tesseract_available(),
+        "rapidocr": not failure,
+        "tesseract": tesseract,
+        "available": available,
+        "reason": "" if available else unavailable_reason(),
     }
