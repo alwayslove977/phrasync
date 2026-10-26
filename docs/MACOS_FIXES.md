@@ -2,11 +2,11 @@
 
 > **简体中文读者请先看这里**：本页是英文的 macOS 修复记录，面向需要审计改动细节的读者。
 > 安装、系统要求、签名风险、故障排查与已知限制的完整中文说明在
-> [`README_zh.md`](../README_zh.md)；发布包下载见
+> [`README.md`](../README.md)（简体中文，仓库主页）；发布包下载见
 > [Releases — v0.4.7-macos.3](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.3)。
 > 本页暂无完整中文译本，文中所有结论都以中文 README 和包内实测为准。
 >
-> **中文文档入口**：[`README_zh.md`](../README_zh.md) · **English**（本页）
+> **中文文档入口**：[`README.md`](../README.md) · **English**（本页）
 
 This document describes the `macos-fixes` branch of
 [alwayslove977/phrasync](https://github.com/alwayslove977/phrasync), a personal

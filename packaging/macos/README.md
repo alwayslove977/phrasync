@@ -2,7 +2,7 @@
 
 > **简体中文读者**：本页是英文的打包与构建手册，面向要自己构建 `.app` 的开发者。
 > 安装现成发布包、系统要求与故障排查的中文说明在
-> [`../../README_zh.md`](../../README_zh.md)（简体中文，中文优先入口）；
+> [`../../README.md`](../../README.md)（简体中文，仓库主页）；
 > 修复清单见 [`../../docs/MACOS_FIXES.md`](../../docs/MACOS_FIXES.md)（英文，开头有中文导读）。
 
 Builds a double-clickable `Phrasync.app` from this repository. No Terminal, no

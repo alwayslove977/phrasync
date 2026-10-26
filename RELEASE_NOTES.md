@@ -3,7 +3,7 @@
 > **简体中文读者**：本文件是上游 Phrasync 的英文变更日志（Windows / Microsoft Store 线）。
 > 本 fork 的 macOS 版本差异、下载与已知限制见
 > [Releases 页（中文优先）](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.3)
-> 与 [`README_zh.md`](README_zh.md)。本页暂无完整中文译本。
+> 与 [`README.md`](README.md)（简体中文，仓库主页）。本页暂无完整中文译本。
 
 GitHub source release. The matching 0.4.7.0 Store package was submitted for certification on October 18, 2026. Availability follows approval and rollout. This maintenance update focuses on the in-app Microsoft Store update flow.
 
