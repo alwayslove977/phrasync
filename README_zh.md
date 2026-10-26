@@ -2,7 +2,7 @@
 
 # Phrasync
 
-[English](README.md) · **简体中文**
+**简体中文** · [English](README.md)
 
 Phrasync 是一个免费、完全本地运行的歌词视频与字幕工作室。导入歌曲或视频，在本机完成转录，校对文字与时间轴，调整视觉样式，最后导出 MP4。媒体文件不会被上传到任何 Phrasync 服务。
 
@@ -17,8 +17,8 @@ Phrasync 是一个免费、完全本地运行的歌词视频与字幕工作室�
 > - **非官方发布**：不是 jaydemks 的官方版本。
 > - **没有 Developer ID 签名，也没有公证（notarization）**，只有 PyInstaller 的 ad-hoc 签名。
 > - 已发布的包 **仅支持 Intel（x86_64）**。
-> - 下载：[Releases — v0.4.7-macos.1](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.1)。
-> - 构建细节与全部改动清单：[`packaging/macos/README.md`](packaging/macos/README.md) 与 [`docs/MACOS_FIXES.md`](docs/MACOS_FIXES.md)。
+> - 下载：[Releases — v0.4.7-macos.2](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.2)。
+> - 构建细节与全部改动清单：[`packaging/macos/README.md`](packaging/macos/README.md)（英文）与 [`docs/MACOS_FIXES.md`](docs/MACOS_FIXES.md)（英文）；英文主页面见 [`README.md`](README.md)。
 
 ## 功能概览
 
@@ -45,18 +45,18 @@ Phrasync 是一个免费、完全本地运行的歌词视频与字幕工作室�
 | --- | --- |
 | 系统版本 | **macOS 12.0 及以上**。按本分支构建的包在 `Info.plist` 里声明 `LSMinimumSystemVersion` = **12.0**（AI 包开关不改变该值），取自包内非 OCR 原生依赖的 load command 实测值。**OCR 依赖要求 13.4，因此在 12.0–13.3 上 OCR 不保证可用**，其余功能不受影响 |
 | 架构 | **x86_64（Intel）**；Apple Silicon 需通过 Rosetta 2 运行 |
-| 磁盘 | 应用解压后约 **922 MiB**（zip 包 392.8 MiB），另需留出工程与导出视频的空间 |
+| 磁盘 | 应用解压后约 **864 MiB**（zip 包约 373.5 MiB / 391.6 MB），另需留出工程与导出视频的空间 |
 | 其他 | 不需要预装 Python、Homebrew、Chrome 或 Edge |
 
-关于版本号的说明很重要：对已发布包内全部 550 个 Mach-O 文件执行 `vtool -show-build` 的结果是：371 个文件要求 12.0（`av`、numpy 及多数扩展模块），4 个文件要求 13.4（OCR 使用的 ONNX Runtime 1.23.2）。dyld 不会加载最低版本高于当前系统的库，所以低于 12.0 的系统连核心扩展都导入不了。原先构建配置把这些一律写成 11.0，**这个声明并不成立**。
+关于版本号的说明很重要：对 `v0.4.7-macos.2` 包内全部 **225 个 Mach-O 文件**逐个执行 `vtool -show-build`，其中 **158 个**携带 build version：**150 个要求 12.0**（`av`、numpy 及多数扩展模块）、**2 个要求 13.4**（OCR 使用的 ONNX Runtime 1.23.2）、4 个要求 11.0（FFmpeg）、2 个要求 10.x；其余 67 个（静态归档等）不携带 build version。dyld 不会加载最低版本高于当前系统的库，所以低于 12.0 的系统连核心扩展都导入不了。原先构建配置把这些一律写成 11.0，**这个声明并不成立**。
 
 现在构建配置声明 **12.0**：这是包内**非 OCR** 原生依赖的最高要求。13.4 只属于 ONNX Runtime，而唯一导入它的是 `phrasync/ocr.py`——该导入是惰性的、包在 `except Exception` 里，失败时先回落 Tesseract，仍不可用才抛 `OCRUnavailable`，并由 `/api/health` 把原因报到界面上。因此 12.0 上除 OCR 外的功能都可运行，**只有 OCR 不保证可用**；如果按 13.4 声明整个包，会把 12.0–13.3 的机器挡在一个只缺 OCR 的应用之外。`--no-ai` 构建同为 12.0。
 
-注意**已经发布的 0.4.7 压缩包是在这次修正之前构建的**，它的 `Info.plist` 里仍然是 11.0，请按 12.0 对待（OCR 另需 13.4）。这些数字来自 Mach-O 的 load command，**不是在 12.x / 13.x 实机上启动验证的结果**。
+当前发布的 `v0.4.7-macos.2` **已经按 12.0 声明**（`Info.plist` 内 `LSMinimumSystemVersion` = 12.0）。更早的 `v0.4.7-macos.1` 声明的是 11.0，已下架（Release 与标签均已删除），请只使用 `v0.4.7-macos.2`。这些数字来自 Mach-O 的 load command，**不是在 12.x / 13.x 实机上启动验证的结果**。
 
 ## 下载与安装（macOS）
 
-1. 从 [Releases](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.1) 下载 `Phrasync-0.4.7-macos-x86_64.zip`。
+1. 从 [Releases — v0.4.7-macos.2](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.2) 下载 `Phrasync-0.4.7-macos.2-x86_64.zip`。
 2. 解压，把 `Phrasync.app` 拖进 `/Applications`（或任意你拥有写权限的位置）。
 3. **首次启动前需要处理隔离标记**：
 
@@ -70,10 +70,10 @@ Phrasync 是一个免费、完全本地运行的歌词视频与字幕工作室�
 
 - ad-hoc 签名**不等于** Developer ID 签名，也**不等于**公证。ad-hoc 只表示包内文件自洽（`codesign --verify --deep --strict` 会通过），不表示 Apple 或任何可信第三方为它背书。
 - 上面的 `xattr` 命令会**移除该应用的隔离标记**，等于对这一份应用关闭 Gatekeeper 的下载来源检查。只应对你自己构建、或从你信任的来源获取、并核对过校验值的包这样做。
-- 本次发布包的 SHA-256：`dfee7c54c6931b4b55b676569e2fb72d0ace2a0846bebecc5054d205aad1ffdd`。下载后可自行核对：
+- 本次发布包的 SHA-256：`96de29609f5aacb28d160ec4669cab31dcc44b30d950d1e2bcff64e0dab2ce8d`。下载后可自行核对：
 
   ```bash
-  shasum -a 256 ~/Downloads/Phrasync-0.4.7-macos-x86_64.zip
+  shasum -a 256 ~/Downloads/Phrasync-0.4.7-macos.2-x86_64.zip
   ```
 
 - 如果你是在本机自行构建、或者用 `cp -Rc`（APFS clone）而不是 `ditto` 拷贝到桌面，通常不会带上隔离标记，也就不需要上面这一步。`ditto` 会把 PyInstaller 的共享库符号链接展开成真实副本，体积大约翻倍。

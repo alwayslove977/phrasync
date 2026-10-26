@@ -1,5 +1,13 @@
 # macOS maintenance build (fork)
 
+> **简体中文读者请先看这里**：本页是英文的 macOS 修复记录，面向需要审计改动细节的读者。
+> 安装、系统要求、签名风险、故障排查与已知限制的完整中文说明在
+> [`README_zh.md`](../README_zh.md)；发布包下载见
+> [Releases — v0.4.7-macos.2](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.2)。
+> 本页暂无完整中文译本，文中所有结论都以中文 README 和包内实测为准。
+>
+> **中文文档入口**：[`README_zh.md`](../README_zh.md) · **English**（本页）
+
 This document describes the `macos-fixes` branch of
 [alwayslove977/phrasync](https://github.com/alwayslove977/phrasync), a personal
 maintenance fork of [jaydemks/phrasync](https://github.com/jaydemks/phrasync).
@@ -12,8 +20,10 @@ as historical in [Verification](#verification), instead of being implied.
   docs-only commit later, at `65fd20e`. Upstream has since published `v0.4.8`,
   `v0.4.9` and `v0.5.0`; those changes are **not** included here.
 - **Maintained artefact:** `Phrasync.app` 0.4.7, x86_64, ad-hoc signed, not
-  notarised — the bundle published on 2026-10-19. Its measurements below are
-  marked as historical wherever they cannot be reproduced without rebuilding.
+  notarised. The latest published bundle is `v0.4.7-macos.2` (2026-10-25,
+  commit `2a28684`); the earlier `v0.4.7-macos.1` (2026-10-19) was withdrawn
+  and its release and tag were deleted. Measurements below are marked as
+  historical wherever they cannot be reproduced without rebuilding.
 - **Licence:** unchanged from upstream, Apache-2.0 (see `LICENSE`, `NOTICE`,
   `THIRD_PARTY_NOTICES.md`).
 
@@ -34,8 +44,8 @@ packaging; they are listed individually so the difference stays auditable.
 
 ## Download and install
 
-1. Download `Phrasync-0.4.7-macos-x86_64.zip` from
-   [Releases](https://github.com/alwayslove977/phrasync/releases).
+1. Download `Phrasync-0.4.7-macos.2-x86_64.zip` from
+   [Releases](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.2).
 2. Unzip and drag `Phrasync.app` into `/Applications`.
 3. First launch: right-click the app → **Open** → **Open**.
    If macOS still refuses to start it, clear the quarantine flag once:
@@ -54,22 +64,24 @@ not a bug in the app.
 
 - **macOS 12.0 or later, with OCR requiring 13.4.** The spec declares 12.0 from
   the measured floor instead of the hard-coded `11.0` it used to ship: `vtool
-  -show-build` over all 550 Mach-O files in the 0.4.7 bundle reports 371 files at
-  12.0 (`av`, numpy and most extension modules) and four at 13.4 (`onnxruntime`
-  1.23.2, used only by OCR). dyld refuses a library whose minimum is newer than
-  the running system, so 11.x cannot even import the core extensions. The 13.4
+  -show-build` over the 225 Mach-O files in the `v0.4.7-macos.2` bundle finds
+  158 that carry a build version — 150 at 12.0 (`av`, numpy and most extension
+  modules), 2 at 13.4 (`onnxruntime` 1.23.2, used only by OCR), 4 at 11.0
+  (FFmpeg) and 2 at 10.x; the other 67 are static archives without one. dyld
+  refuses a library whose minimum is newer than the running system, so 11.x
+  cannot even import the core extensions. The 13.4
   objects are reached only through `phrasync/ocr.py`, which imports them lazily
   and turns a failed import into `OCRUnavailable`, so the declared floor stays at
   12.0 for both build flavours and **OCR is not guaranteed on 12.0-13.3**;
   everything else runs there. `PHRASYNC_BUILD_AI=0` removes the ONNX Runtime
-  payload and declares the same 12.0. The **published `v0.4.7-macos.1` zip
-  predates this change** and still declares 11.0; nothing was rebuilt. These
+  payload and declares the same 12.0. The published `v0.4.7-macos.2` bundle
+  declares 12.0; the withdrawn `v0.4.7-macos.1` zip declared 11.0. These
   figures come from the load commands; no 12.x or 13.x machine was available to
   run the bundle on.
 - **Intel (x86_64).** The published bundle contains only x86_64 code. On Apple
   Silicon it runs under Rosetta 2; that path was **not** tested on arm64 hardware.
-- ~2.5 GB free disk space (963.7 MB unpacked, plus the zip; measured on the
-  published 0.4.7 bundle).
+- ~2.5 GB free disk space (906 MB / 864 MiB unpacked, plus the 391.6 MB zip;
+  measured on the `v0.4.7-macos.2` bundle).
 - No Python, Homebrew, Chrome or Edge installation is needed — the bundle carries
   its own runtime, FFmpeg, Chromium and Whisper `tiny` model.
 

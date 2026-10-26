@@ -1,5 +1,10 @@
 # macOS application bundle
 
+> **简体中文读者**：本页是英文的打包与构建手册，面向要自己构建 `.app` 的开发者。
+> 安装现成发布包、系统要求与故障排查的中文说明在
+> [`../../README_zh.md`](../../README_zh.md)（简体中文，中文优先入口）；
+> 修复清单见 [`../../docs/MACOS_FIXES.md`](../../docs/MACOS_FIXES.md)（英文，开头有中文导读）。
+
 Builds a double-clickable `Phrasync.app` from this repository. No Terminal, no
 virtualenv, no source checkout required at runtime.
 
@@ -26,7 +31,7 @@ dist/Phrasync.app/Contents/MacOS/Phrasync --smoke   # verifies the packaged GUI
 ## Installing the bundle
 
 ```bash
-cp -Rc dist/Phrasync.app ~/Desktop/Phrasync.app   # -c clones on APFS (≈922 MiB)
+cp -Rc dist/Phrasync.app ~/Desktop/Phrasync.app   # -c clones on APFS (≈864 MiB)
 ```
 
 Use `cp -Rc` rather than `ditto`: `ditto` expands PyInstaller's shared-library
@@ -255,14 +260,17 @@ keeps an optional access-token field.
 * `LSMinimumSystemVersion` is **derived from this table, not hard-coded**: both
   build flavours declare `12.0`, the floor of every native dependency except ONNX
   Runtime. It used to be a flat `11.0`, which was not what the bundle could load.
-  `vtool -show-build` over every Mach-O in the published bundle (550 files) gives:
+  `vtool -show-build` over every Mach-O in the `v0.4.7-macos.2` bundle (225
+  files; 158 of them carry a build version) gives:
 
   | minos | files | examples |
   | --- | --- | --- |
-  | 13.4 | 4 | `onnxruntime/capi/libonnxruntime.1.23.2.dylib`, `onnxruntime_pybind11_state.so` |
-  | 12.0 | 371 | `av/format.cpython-312-darwin.so`, most extension modules |
-  | 11.0 | 61 | `imageio_ffmpeg/binaries/ffmpeg-*-v7.1` |
-  | ≤ 10.16 | 114 | `libctranslate2` (10.13), `cv2` (10.16), `tokenizers` (10.12) |
+  | 13.4 | 2 | `onnxruntime/capi/libonnxruntime.1.23.2.dylib`, `onnxruntime_pybind11_state.so` |
+  | 12.0 | 150 | `av/format.cpython-312-darwin.so`, most extension modules |
+  | 11.0 | 4 | `imageio_ffmpeg/binaries/ffmpeg-*-v7.1` |
+  | ≤ 10.16 | 2 | `libctranslate2` (10.15), `cv2` (10.16) |
+
+  The remaining 67 files are static archives that report no build version.
 
   dyld will not load a library whose minimum is newer than the running system, so
   12.0 is the real floor for starting the app: below it the core extensions would
@@ -274,8 +282,9 @@ keeps an optional access-token field.
   value the build tests compare against this table. ONNX Runtime 1.23.2 is the
   last release with a macOS x86_64 wheel (`requirements-ai.txt` pins it), so the
   13.4 figure moves only when that dependency does. Nothing was measured on a 12.x
-  or 13.x machine; the numbers are load commands, not a launch test. The published
-  `v0.4.7-macos.1` zip was built before this change and still declares 11.0.
+  or 13.x machine; the numbers are load commands, not a launch test. The
+  published `v0.4.7-macos.2` bundle declares 12.0; the withdrawn
+  `v0.4.7-macos.1` zip was built before this change and declared 11.0.
 * PyInstaller cannot cross-compile. The bootloader and every native extension come
   from the build interpreter, and Intel Macs cannot execute arm64 code at all
   (`hw.optional.arm64` is absent), so an arm64 bundle cannot be built or tested
