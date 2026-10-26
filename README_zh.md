@@ -17,7 +17,7 @@ Phrasync 是一个免费、完全本地运行的歌词视频与字幕工作室�
 > - **非官方发布**：不是 jaydemks 的官方版本。
 > - **没有 Developer ID 签名，也没有公证（notarization）**，只有 PyInstaller 的 ad-hoc 签名。
 > - 已发布的包 **仅支持 Intel（x86_64）**。
-> - 下载：[Releases — v0.4.7-macos.2](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.2)。
+> - 下载：[Releases — v0.4.7-macos.3](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.3)。
 > - 构建细节与全部改动清单：[`packaging/macos/README.md`](packaging/macos/README.md)（英文）与 [`docs/MACOS_FIXES.md`](docs/MACOS_FIXES.md)（英文）；英文主页面见 [`README.md`](README.md)。
 
 ## 功能概览
@@ -52,11 +52,11 @@ Phrasync 是一个免费、完全本地运行的歌词视频与字幕工作室�
 
 现在构建配置声明 **12.0**：这是包内**非 OCR** 原生依赖的最高要求。13.4 只属于 ONNX Runtime，而唯一导入它的是 `phrasync/ocr.py`——该导入是惰性的、包在 `except Exception` 里，失败时先回落 Tesseract，仍不可用才抛 `OCRUnavailable`，并由 `/api/health` 把原因报到界面上。因此 12.0 上除 OCR 外的功能都可运行，**只有 OCR 不保证可用**；如果按 13.4 声明整个包，会把 12.0–13.3 的机器挡在一个只缺 OCR 的应用之外。`--no-ai` 构建同为 12.0。
 
-当前发布的 `v0.4.7-macos.2` **已经按 12.0 声明**（`Info.plist` 内 `LSMinimumSystemVersion` = 12.0）。更早的 `v0.4.7-macos.1` 声明的是 11.0，已下架（Release 与标签均已删除），请只使用 `v0.4.7-macos.2`。这些数字来自 Mach-O 的 load command，**不是在 12.x / 13.x 实机上启动验证的结果**。
+当前发布的 `v0.4.7-macos.3` **同样按 12.0 声明**（`Info.plist` 内 `LSMinimumSystemVersion` = 12.0，与 `v0.4.7-macos.2` 一致）。更早的 `v0.4.7-macos.1` 声明的是 11.0，已下架（Release 与标签均已删除），请只使用 `v0.4.7-macos.3`。这些数字来自 Mach-O 的 load command，**不是在 12.x / 13.x 实机上启动验证的结果**。
 
 ## 下载与安装（macOS）
 
-1. 从 [Releases — v0.4.7-macos.2](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.2) 下载 `Phrasync-0.4.7-macos.2-x86_64.zip`。
+1. 从 [Releases — v0.4.7-macos.3](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.3) 下载 `Phrasync-0.4.7-macos.3-x86_64.zip`。
 2. 解压，把 `Phrasync.app` 拖进 `/Applications`（或任意你拥有写权限的位置）。
 3. **首次启动前需要处理隔离标记**：
 
@@ -70,10 +70,10 @@ Phrasync 是一个免费、完全本地运行的歌词视频与字幕工作室�
 
 - ad-hoc 签名**不等于** Developer ID 签名，也**不等于**公证。ad-hoc 只表示包内文件自洽（`codesign --verify --deep --strict` 会通过），不表示 Apple 或任何可信第三方为它背书。
 - 上面的 `xattr` 命令会**移除该应用的隔离标记**，等于对这一份应用关闭 Gatekeeper 的下载来源检查。只应对你自己构建、或从你信任的来源获取、并核对过校验值的包这样做。
-- 本次发布包的 SHA-256：`96de29609f5aacb28d160ec4669cab31dcc44b30d950d1e2bcff64e0dab2ce8d`。下载后可自行核对：
+- 本次发布包的 SHA-256：`ebbffaa169badaf1a5c4ca9abce1aec07495ab577196a37d5a3807a7873fe8d3`。下载后可自行核对：
 
   ```bash
-  shasum -a 256 ~/Downloads/Phrasync-0.4.7-macos.2-x86_64.zip
+  shasum -a 256 ~/Downloads/Phrasync-0.4.7-macos.3-x86_64.zip
   ```
 
 - 如果你是在本机自行构建、或者用 `cp -Rc`（APFS clone）而不是 `ditto` 拷贝到桌面，通常不会带上隔离标记，也就不需要上面这一步。`ditto` 会把 PyInstaller 的共享库符号链接展开成真实副本，体积大约翻倍。

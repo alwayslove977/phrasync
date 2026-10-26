@@ -283,7 +283,7 @@ keeps an optional access-token field.
   last release with a macOS x86_64 wheel (`requirements-ai.txt` pins it), so the
   13.4 figure moves only when that dependency does. Nothing was measured on a 12.x
   or 13.x machine; the numbers are load commands, not a launch test. The
-  published `v0.4.7-macos.2` bundle declares 12.0; the withdrawn
+  published `v0.4.7-macos.3` bundle declares 12.0; the withdrawn
   `v0.4.7-macos.1` zip was built before this change and declared 11.0.
 * PyInstaller cannot cross-compile. The bootloader and every native extension come
   from the build interpreter, and Intel Macs cannot execute arm64 code at all

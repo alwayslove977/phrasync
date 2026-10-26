@@ -22,7 +22,7 @@ Created by [jaydemks](https://github.com/jaydemks).
 > **13.4**, and only `phrasync/ocr.py` reaches them, importing them lazily and
 > converting the failure into "OCR unavailable" -- so everything except OCR runs
 > on 12.0, and **OCR is not guaranteed on 12.0-13.3**. The published
-> `v0.4.7-macos.2` bundle declares 12.0; the earlier `v0.4.7-macos.1` build
+> `v0.4.7-macos.3` bundle declares 12.0; the earlier `v0.4.7-macos.1` build
 > declared 11.0 and has been withdrawn. Both numbers come from Mach-O load
 > commands (`vtool -show-build` across the bundle's 225 Mach-O files), not from
 > a launch test on a 12.x or 13.x machine.
@@ -30,7 +30,7 @@ Created by [jaydemks](https://github.com/jaydemks).
 > [`docs/MACOS_FIXES.md`](docs/MACOS_FIXES.md) (English) ·
 > [`README_zh.md`](README_zh.md) (简体中文).
 >
-> Download: [Releases — v0.4.7-macos.2](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.2).
+> Download: [Releases — v0.4.7-macos.3](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.3).
 
 ## Watch Phrasync in action
 

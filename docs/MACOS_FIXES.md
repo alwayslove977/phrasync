@@ -3,7 +3,7 @@
 > **简体中文读者请先看这里**：本页是英文的 macOS 修复记录，面向需要审计改动细节的读者。
 > 安装、系统要求、签名风险、故障排查与已知限制的完整中文说明在
 > [`README_zh.md`](../README_zh.md)；发布包下载见
-> [Releases — v0.4.7-macos.2](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.2)。
+> [Releases — v0.4.7-macos.3](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.3)。
 > 本页暂无完整中文译本，文中所有结论都以中文 README 和包内实测为准。
 >
 > **中文文档入口**：[`README_zh.md`](../README_zh.md) · **English**（本页）
@@ -20,10 +20,12 @@ as historical in [Verification](#verification), instead of being implied.
   docs-only commit later, at `65fd20e`. Upstream has since published `v0.4.8`,
   `v0.4.9` and `v0.5.0`; those changes are **not** included here.
 - **Maintained artefact:** `Phrasync.app` 0.4.7, x86_64, ad-hoc signed, not
-  notarised. The latest published bundle is `v0.4.7-macos.2` (2026-10-25,
-  commit `2a28684`); the earlier `v0.4.7-macos.1` (2026-10-19) was withdrawn
-  and its release and tag were deleted. Measurements below are marked as
-  historical wherever they cannot be reproduced without rebuilding.
+  notarised. The latest published bundle is `v0.4.7-macos.3` (2026-10-26), a
+  rebuild of the same application sources as `v0.4.7-macos.2` (2026-10-25,
+  commit `2a28684`) with the hardened packaging pipeline; the earlier
+  `v0.4.7-macos.1` (2026-10-19) was withdrawn and its release and tag were
+  deleted. Measurements below are marked as historical wherever they cannot be
+  reproduced without rebuilding.
 - **Licence:** unchanged from upstream, Apache-2.0 (see `LICENSE`, `NOTICE`,
   `THIRD_PARTY_NOTICES.md`).
 
@@ -44,8 +46,8 @@ packaging; they are listed individually so the difference stays auditable.
 
 ## Download and install
 
-1. Download `Phrasync-0.4.7-macos.2-x86_64.zip` from
-   [Releases](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.2).
+1. Download `Phrasync-0.4.7-macos.3-x86_64.zip` from
+   [Releases](https://github.com/alwayslove977/phrasync/releases/tag/v0.4.7-macos.3).
 2. Unzip and drag `Phrasync.app` into `/Applications`.
 3. First launch: right-click the app → **Open** → **Open**.
    If macOS still refuses to start it, clear the quarantine flag once:
@@ -74,7 +76,7 @@ not a bug in the app.
   and turns a failed import into `OCRUnavailable`, so the declared floor stays at
   12.0 for both build flavours and **OCR is not guaranteed on 12.0-13.3**;
   everything else runs there. `PHRASYNC_BUILD_AI=0` removes the ONNX Runtime
-  payload and declares the same 12.0. The published `v0.4.7-macos.2` bundle
+  payload and declares the same 12.0. The published `v0.4.7-macos.3` bundle
   declares 12.0; the withdrawn `v0.4.7-macos.1` zip declared 11.0. These
   figures come from the load commands; no 12.x or 13.x machine was available to
   run the bundle on.
