@@ -433,6 +433,11 @@ def _spec_repo(workspace: Path) -> Path:
     spec = repo / "packaging" / "macos" / "Phrasync.spec"
     spec.parent.mkdir(parents=True)
     spec.write_text(SPEC.read_text(encoding="utf-8"), encoding="utf-8")
+    # The spec imports its allowlist from its own directory, so the disposable
+    # repo needs that module too -- the rule under test must be the shipping one,
+    # not a copy restated here.
+    (spec.parent / "bundle_manifest.py").write_text(
+        (SPEC.parent / "bundle_manifest.py").read_text(encoding="utf-8"), encoding="utf-8")
     (repo / "pyproject.toml").write_text("[project]\nname = \"phrasync\"\nversion = \"0.4.7\"\n",
                                          encoding="utf-8")
     for name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
@@ -442,6 +447,9 @@ def _spec_repo(workspace: Path) -> Path:
         "assets/NotoSansJP-VF.ttf",
         "assets/style_reference.png",
         "assets/.DS_Store",
+        # The two audited asset trees; the manifest refuses a build without them.
+        f"assets/browser/chrome-headless-shell-mac-{BROWSER_ARCH}/chrome-headless-shell",
+        "assets/models/whisper-tiny/model.bin",
     ]:
         target = repo / rel
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -636,13 +644,48 @@ def test_spec_still_bundles_every_runtime_static_file(monkeypatch, workspace):
     assert "assets/NotoSansJP-VF.ttf" in dests
 
 
-def test_spec_exclusion_matches_only_the_named_files(monkeypatch, workspace):
+def test_spec_exclusion_matches_only_debris(monkeypatch, workspace):
+    """The post-Analysis filter drops Finder metadata and editor backups only.
+
+    It must not become a second, weaker allowlist: a runtime file that happens to
+    look unusual has to survive, otherwise a packaging change could silently drop
+    something the editor loads.
+    """
     _datas, namespace, _report = _run_spec(monkeypatch, _spec_repo(workspace))
-    is_excluded = namespace["is_excluded_data"]
-    assert all(is_excluded(backup) for backup in SPEC_BACKUPS)
-    assert not is_excluded("static/app.js")
-    assert not is_excluded("static/vendor/three.module.min.js")
-    assert is_excluded("assets/.DS_Store")
+    is_debris = namespace["is_debris_data"]
+    assert all(is_debris(backup) for backup in SPEC_BACKUPS)
+    assert not is_debris("static/app.js")
+    assert not is_debris("static/vendor/three.module.min.js")
+    assert is_debris("assets/.DS_Store")
+
+
+def test_spec_refuses_a_file_outside_the_allowlist(monkeypatch, workspace):
+    """A file dropped into static/ stops the build instead of being packaged.
+
+    This is the guarantee that replaces the old blocklist: ``.gitignore`` does not
+    apply to a PyInstaller directory entry, so anything unreviewed must be a hard
+    failure rather than a silent passenger.
+    """
+    repo = _spec_repo(workspace)
+    stray = repo / "static" / "field-notes.mp4"
+    stray.parent.mkdir(parents=True, exist_ok=True)
+    stray.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    with pytest.raises(SystemExit) as raised:
+        _run_spec(monkeypatch, repo)
+    message = str(raised.value)
+    assert "static/field-notes.mp4" in message
+    assert "allowlist" in message
+
+
+def test_spec_refuses_a_user_file_inside_an_audited_asset_tree(monkeypatch, workspace):
+    """The two large asset trees are audited as trees, not exempt from the rules."""
+    repo = _spec_repo(workspace)
+    stray = repo / "assets" / "models" / "whisper-tiny" / "recording.m4a"
+    stray.parent.mkdir(parents=True, exist_ok=True)
+    stray.write_bytes(b"\x00\x00\x00\x18ftypM4A ")
+    with pytest.raises(SystemExit) as raised:
+        _run_spec(monkeypatch, repo)
+    assert "assets/models/whisper-tiny/recording.m4a" in str(raised.value)
 
 
 def test_spec_requires_a_resource_minimum_for_every_ai_package(monkeypatch, workspace):

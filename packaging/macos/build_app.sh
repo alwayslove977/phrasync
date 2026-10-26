@@ -7,6 +7,9 @@
 # Environment overrides:
 #   PHRASYNC_BUILD_VENV     build virtualenv path (default: <repo>/.venv-build)
 #   PHRASYNC_BUILD_PYTHON   interpreter used to create that venv
+#   PHRASYNC_DIST           output directory (default: <repo>/dist)
+#   PHRASYNC_PRIVATE_MARKERS  comma-separated strings that must never appear in
+#                           the build inputs or the bundle (see privacy_gate.py)
 #
 # All output is tee'd to build/macos/logs/build-<timestamp>.log.
 set -euo pipefail
@@ -19,7 +22,7 @@ BUILD_DIR="$ROOT/build/macos"
 LOG_DIR="$BUILD_DIR/logs"
 VENV="${PHRASYNC_BUILD_VENV:-$ROOT/.venv-build}"
 SPEC="$ROOT/packaging/macos/Phrasync.spec"
-DIST="$ROOT/dist"
+DIST="${PHRASYNC_DIST:-$ROOT/dist}"
 APP="$DIST/Phrasync.app"
 FAST=0
 WITH_AI=${PHRASYNC_WITH_AI:-1}
@@ -83,6 +86,21 @@ if [[ ! -x "$VENV/bin/python" ]]; then
 fi
 PY="$VENV/bin/python"
 echo "-- build python: $("$PY" -V) at $PY"
+
+# ---------------------------------------------------------------- privacy gate
+# Runs before a single dependency is installed: a repository that would ship a
+# user file should cost seconds to reject, not a full build. The gate and the
+# spec read the same allowlist (packaging/macos/bundle_manifest.py).
+GATE_REPORT="$LOG_DIR/privacy-gate-$(date +%Y%m%d-%H%M%S).json"
+echo ""
+echo "-- privacy gate"
+if ! "$PY" "$ROOT/packaging/macos/privacy_gate.py" --root "$ROOT" --report "$GATE_REPORT"; then
+  echo "" >&2
+  echo "!! the privacy gate refused to build from this working tree." >&2
+  echo "   Fix the findings above; nothing has been packaged." >&2
+  echo "   report: $GATE_REPORT" >&2
+  exit 1
+fi
 
 # ---------------------------------------------------------------- dependencies
 if [[ $FAST -eq 0 ]]; then
@@ -163,6 +181,25 @@ if [[ $MISSING_COUNT -gt 0 ]]; then
   printf '%s' "$MISSING_DETAIL" >&2
   echo "   The app would install but fail on export or transcription; rebuild once the" >&2
   echo "   missing assets are in place." >&2
+  exit 1
+fi
+
+echo ""
+# ---------------------------------------------------------------- bundle audit
+# The gate approved the inputs; this approves the output. It re-derives every
+# file's type from its own bytes, so a payload that arrived through a wheel or a
+# renamed file is still caught.
+AUDIT_REPORT="$LOG_DIR/bundle-audit-$(date +%Y%m%d-%H%M%S).json"
+ZIP_CANDIDATE="$(ls -t "$DIST"/Phrasync-*.zip 2>/dev/null | head -1 || true)"
+AUDIT_ARGS=(--root "$ROOT" --app "$APP" --report "$AUDIT_REPORT")
+if [[ -n "$ZIP_CANDIDATE" ]]; then
+  AUDIT_ARGS+=(--zip "$ZIP_CANDIDATE")
+fi
+echo "-- bundle audit"
+if ! "$PY" "$ROOT/packaging/macos/audit_bundle.py" "${AUDIT_ARGS[@]}"; then
+  echo "" >&2
+  echo "!! the bundle audit did not pass; do not publish $APP as it stands." >&2
+  echo "   report: $AUDIT_REPORT" >&2
   exit 1
 fi
 

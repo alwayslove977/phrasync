@@ -6,15 +6,17 @@ inside ``Phrasync.app/Contents/Frameworks`` (PyInstaller's onedir layout), which
 starts far faster than a one-file bundle and keeps every resource inspectable.
 
 Notes:
-* ``static/`` and ``assets/`` are collected next to the frozen ``phrasync``
-  package; ``phrasync.config.resource_root()`` resolves them through
-  ``sys._MEIPASS`` so the app never depends on the source checkout.
+* ``static/`` and ``assets/`` reach the bundle through ``bundle_manifest``, which
+  admits one reviewed file at a time; ``phrasync.config.resource_root()``
+  resolves them through ``sys._MEIPASS`` so the app never depends on the source
+  checkout.
 * ``imageio_ffmpeg`` ships the FFmpeg executable used for MP4 encoding, so the
   bundle carries its own encoder instead of assuming Homebrew is installed.
 """
 
 import importlib.util
 import os
+import sys
 import tomllib
 from pathlib import Path
 
@@ -22,6 +24,12 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_dyn
 
 ROOT = Path(SPECPATH).resolve().parent.parent  # ~/phrasync
 BUILD_DIR = ROOT / "build" / "macos"
+
+# The allowlist lives beside this file so the pre-build gate and the packaging
+# agree on one definition. Importing it by path (rather than relying on the
+# working directory) keeps the spec runnable from anywhere.
+sys.path.insert(0, str(ROOT / "packaging" / "macos"))
+import bundle_manifest  # noqa: E402
 
 with (ROOT / "pyproject.toml").open("rb") as handle:
     APP_VERSION = tomllib.load(handle)["project"]["version"]
@@ -51,9 +59,25 @@ OCR_SYSTEM_VERSION = "13.4"
 
 ICON = BUILD_DIR / "Phrasync.icns"
 
-datas = [
-    (str(ROOT / "static"), "static"),
-    (str(ROOT / "assets"), "assets"),
+# The bundle receives exactly the files ``bundle_manifest`` admits -- one entry
+# per file, never a directory. A directory entry lets PyInstaller copy whatever
+# happens to sit in ``static/`` or ``assets/``: an editor backup, a screenshot, a
+# user video dropped there while testing. ``.gitignore`` does not apply to it.
+manifest_datas, held_out, refused = bundle_manifest.collect(ROOT)
+if refused:
+    raise SystemExit(
+        "ERROR: build inputs contain files outside the reviewed allowlist:\n"
+        + "\n".join(f"       {path}  ({reason})" for path, reason in refused)
+        + "\n       Move them out of static/ or assets/, or teach\n"
+          "       packaging/macos/bundle_manifest.py about the new file. Nothing\n"
+          "       unlisted is ever packaged."
+    )
+datas = list(manifest_datas)
+print(f"bundle inputs: {len(datas)} reviewed file(s) admitted, {len(held_out)} held out")
+for path, reason in held_out:
+    print(f"  held out  {path}  ({reason})")
+
+datas += [
     (str(ROOT / "LICENSE"), "."),
     (str(ROOT / "NOTICE"), "."),
     (str(ROOT / "THIRD_PARTY_NOTICES.md"), "."),
@@ -62,27 +86,16 @@ datas = [
 datas += collect_data_files("imageio_ffmpeg")
 datas += collect_data_files("webview")
 
-# PyInstaller has no exclusion option for datas: a directory entry is walked and
-# every file below it is copied, so .gitignore has no say over the bundle. These
-# editor backups sit next to the runtime files and would ship inside static/.
-# Named one by one so a future rewrite of app.js can never take a real file with
-# it; anything not listed here is still collected.
-EXCLUDED_DATA = {
-    "static/app.js.bak",
-    "static/app-ui.js.bak",
-    "static/app.js.font-backup",
-    "static/i18n.js.before_source_tracking.bak",
-}
 
+def is_debris_data(dest):
+    """True for Finder metadata and editor backups inside a package's data files.
 
-def is_excluded_data(dest):
-    """True for a collected path that must stay out of the bundle.
-
-    ``dest`` is the target path inside the bundle, e.g. ``static/app.js.bak``.
-    Finder metadata carries nothing the app reads, so every .DS_Store goes too --
-    ``assets/.DS_Store`` is the one that would otherwise be copied.
+    Third-party collections are walked by PyInstaller, so a stray ``.DS_Store``
+    or a maintainer's ``.bak`` can ride along. Media and database payloads are
+    *not* dropped here: if a package legitimately ships one, silently deleting it
+    would break the app, so those are refused loudly by the check below instead.
     """
-    return dest.replace(os.sep, "/") in EXCLUDED_DATA or Path(dest).name == ".DS_Store"
+    return bundle_manifest.is_denied_name(Path(dest).name)
 
 
 hiddenimports = [
@@ -277,8 +290,26 @@ a = Analysis(
 # them out of the bundle. Filtering after Analysis also covers the files that
 # enter through the imageio_ffmpeg/webview/AI collections.
 _collected = len(a.datas)
-a.datas = [entry for entry in a.datas if not is_excluded_data(entry[0])]
+a.datas = [entry for entry in a.datas if not is_debris_data(entry[0])]
 print(f"data files held out of the bundle: {_collected - len(a.datas)}")
+
+# A media or database payload contributed by a wheel would ship inside the app.
+# Refuse it before COLLECT rather than discovering it in the 800 MB bundle.
+# PEM containers are judged by their bytes: certifi's public CA bundle must pass,
+# a private key must not.
+_payload = []
+for _dest, _source, _kind in a.datas:
+    _suffix = Path(_dest).suffix.lower()
+    if _suffix in bundle_manifest.DENY_SUFFIXES:
+        _payload.append(_dest)
+    elif _suffix in bundle_manifest.PEM_SUFFIXES and bundle_manifest.carries_private_key(_source):
+        _payload.append(_dest + "  (private key)")
+if _payload:
+    raise SystemExit(
+        "ERROR: collected data files include media, database or credential payloads:\n"
+        + "\n".join(f"       {name}" for name in _payload[:20])
+        + "\n       Identify the package that ships them before building again."
+    )
 
 pyz = PYZ(a.pure)
 exe = EXE(
